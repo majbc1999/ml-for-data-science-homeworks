@@ -2,7 +2,7 @@ import numpy as np
 import random
 import warnings
 from typing import Callable, Union
-from math import sqrt, ceil
+from math import sqrt, floor
 
 
 def all_columns(X: np.array, rand: random.Random) -> range:
@@ -17,7 +17,7 @@ def random_sqrt_columns(X: np.array, rand: random.Random) -> list:
     Returns random sqrt number of columns of X, without repetition
     """
     all_cols = list(all_columns(X, rand))
-    number_of_cols = ceil(sqrt(X.shape[1]))
+    number_of_cols = floor(sqrt(X.shape[1]))
 
     return list(rand.sample(all_cols, number_of_cols))
 
@@ -33,6 +33,7 @@ def find_best_split(X: np.array,
     best_feature = None
     value_to_split = None
     lowest_gini = 1
+
 
     def gini_impurity(y):
         """
@@ -63,13 +64,27 @@ def find_best_split(X: np.array,
             gini = (len(left_y) / len(y)) * left_impurity + \
                                 (len(right_y) / len(y)) * right_impurity
 
-            if gini < lowest_gini:
+
+            if gini <= lowest_gini:
                 best_feature = feature
                 value_to_split = value
                 lowest_gini = gini
 
     return best_feature, value_to_split
 
+
+def majority_class(x: np.array) -> int:
+    num_zeros = np.sum(x == 0)
+    num_ones = np.sum(x == 1)
+
+    if num_zeros > num_ones:
+        return 0
+    elif num_ones > num_zeros:
+        return 1
+    else:
+        warnings.warn("Cannot predict for sure. Same number of 0 and 1 samples. Predicted 0.")
+        return 0
+    
 
 class TreeNode:
 
@@ -109,10 +124,18 @@ def recursively_build(X: np.array,
     """
     Recursivelly builds a tree, consinsting of nodes
     """
+
+    if len(np.unique(y)) == 1:
+        return TreeNode(True, prediction=y[0])
+
+
     if len(X) >= min_samples:
         # split here
         candidate_columns = candidates_columns_function(X, rand)
         feature, value = find_best_split(X, y, candidate_columns)
+
+        if feature is None:
+            return TreeNode(True, majority_class(y))
 
         left_X = X[X[:, feature] <= value]
         left_y = y[X[:, feature] <= value]
@@ -149,7 +172,7 @@ def recursively_predict(x: np.array, tree: TreeNode):
 
 class Tree:
     """
-    Classification tree, which accepts input variable and predicts a binary target variable.
+    Classification tree skeleton.
     """
 
     def __init__(self, rand: random.Random = None, 
@@ -170,37 +193,193 @@ class Tree:
         return recursively_build(X, y, self.min_samples, self.get_candidate_columns, self.rand)
 
 
-# class RandomForest:
-# 
-#     def __init__(self, rand=None, n=50):
-#         self.n = n
-#         self.rand = rand
-#         self.rftree = Tree(...)  # initialize the tree properly
-# 
-#     # TODO: finish method build
-#     def build(self, X, y):
-#         # ...
-#         return RFModel(...)
+class RFModel:
+    """
+    An instance of classification trees, built on data, ready to predict
+    """
 
-# 
-# class RFModel:
-# 
-#     def __init__(self, ...):
-#         # ...
-# 
-#     def predict(self, X):
-#         # ...
-#         return predictions
-# 
-#     def importance(self):
-#         imps = np.zeros(self.X.shape[1])
-#         # ...
-#         return imps
-# 
-# 
-# if __name__ == "__main__":
-#     learn, test, legend = tki()
-# 
-#     print("full", hw_tree_full(learn, test))
-#     print("random forests", hw_randomforests(learn, test))
-# 
+    def __init__(self, trees: list[TreeNode], X: np.array, y: np.array):
+        self.trees = trees
+        self.X = X
+        self.y = y
+
+
+    def predict(self, X: np.array) -> np.array:
+        predictions = []
+
+        for tree in self.trees:
+            vector_of_predictions = tree.predict(X)
+            predictions.append(vector_of_predictions)
+        
+        predictions = np.array(predictions)
+        final_predictions = []
+
+        for i in range(len(predictions[0])):
+            all_votes = predictions[:, i]
+            final_predictions.append(majority_class(all_votes))
+
+        return np.array(final_predictions)
+
+
+    def importance(self) -> np.array:
+        """
+        Return an array of attribute importance (each element is importance of i-th attribute)
+        """
+    
+        missclasified_original = 0
+        N = len(self.trees) * len(self.X)
+
+        for index, j in enumerate(self.X):
+            for tree in self.trees:
+                prediction = tree.predict(np.array([j]))[0]
+                if prediction != self.y[index]:
+                    missclasified_original += 1 / N
+
+        missclasification_difference = []
+
+        for i in range(len(self.X[0])):
+            # create new_X, same as X, only with i-th column shuffled randomly
+            new_X = np.copy(self.X)
+            np.random.shuffle(new_X[:,i])
+            
+            missclasified_permuted = 0
+
+            for tree in self.trees:
+                for index, j in enumerate(new_X):
+                    prediction = tree.predict(np.array([j]))
+                    if prediction != self.y[index]:
+                        missclasified_permuted += 1 / N
+
+            missclasification_difference.append(missclasified_permuted - missclasified_original)
+
+        return np.array(missclasification_difference)
+    
+
+class RandomForest:
+
+    def __init__(self, rand: random.Random = None, n: int = 50):
+        self.n = n
+        self.rand = rand
+        self.rftree = Tree(rand=self.rand, get_candidate_columns=random_sqrt_columns, min_samples=2)
+
+    def build(self, X, y) -> RFModel:
+        trees = []
+        for _ in range(self.n):
+            tree = self.rftree.build(X, y)
+            trees.append(tree)
+        return RFModel(trees, X, y)
+
+
+###############################################################################
+#                            PART 2: calculations                             #
+###############################################################################
+
+def import_dataset_to_np(path: str) -> tuple[np.array]:
+    """
+    Imports dataset from `.csv` file.
+
+    Takes first n-1 columns as attributes and last column as target.
+    Returns tuple of X, y
+    """
+    X = np.genfromtxt(path, delimiter=',')
+    y = np.genfromtxt(path, delimiter=',', dtype=str)
+    return(X[1:, :-1], y[1:, -1])
+
+
+def return_train_and_test_data(path: str) -> tuple[np.array]:
+    X, y = import_dataset_to_np(path)
+
+    # Change to binary
+    y = np.where(y == 'Bcr-abl', 1, 0)
+
+    train = X[:130], y[:130]
+    test = X[130:], y[130:]
+
+    return train, test
+
+
+def hw_tree_full(train: tuple[np.array], 
+                 test: tuple[np.array]) -> dict:
+    """
+    Returns missclassification rate, standard error for train and test data
+    for Decision Trees training
+    """
+    train_X, train_y = train
+    test_X, test_y = test
+
+    tree = Tree()
+
+    trained_tree = tree.build(train_X, train_y)
+    pred_y_test = trained_tree.predict(test_X)
+
+    # Missclassification for test data
+    count = 0
+    for i in range(len(test_y)):
+        if test_y[i] == pred_y_test[i]:
+            count += 1
+    test_ms = 1 - count / len(test_y)
+
+    # Missclassification for train data
+    count = 0
+    pred_y_train = trained_tree.predict(train_X)
+    for i in range(len(train_y)):
+        if train_y[i] == pred_y_train[i]:
+            count += 1
+    train_ms = 1 - count / len(train_y)
+
+    # Standard error
+    def standard_error(y_true, y_pred):
+        error = np.abs(y_true - y_pred)
+        return np.mean(error)
+    
+    train_se = standard_error(train_y, pred_y_train)
+    test_se = standard_error(test_y, pred_y_test)
+
+    return (train_ms, train_se), (test_ms, test_se)
+
+
+def hw_randomforests(train: tuple[np.array], 
+                     test: tuple[np.array]) -> dict:
+    """
+    Returns missclassification rate, standard error for train and test data
+    for Decision Trees training
+    """
+    train_X, train_y = train
+    test_X, test_y = test
+
+    forest = RandomForest(rand=random.Random(), n=100)
+    trained_forest = forest.build(train_X, train_y)
+
+    pred_y_test = trained_forest.predict(test_X)
+
+    # Missclassification for test data
+    count = 0
+    for i in range(len(test_y)):
+        if test_y[i] == pred_y_test[i]:
+            count += 1
+    test_ms = 1 - count / len(test_y)
+
+    # Missclassification for train data
+    count = 0
+    pred_y_train = trained_forest.predict(train_X)
+    for i in range(len(train_y)):
+        if train_y[i] == pred_y_train[i]:
+            count += 1
+    train_ms = 1 - count / len(train_y)
+
+    # Standard error
+    def standard_error(y_true, y_pred):
+        error = np.abs(y_true - y_pred)
+        return np.mean(error)
+    
+    train_se = standard_error(train_y, pred_y_train)
+    test_se = standard_error(test_y, pred_y_test)
+
+    return (train_ms, train_se), (test_ms, test_se)        
+
+
+if __name__ == "__main__":
+    train, test = return_train_and_test_data('homework-01/tki-resistance.csv')
+
+    print("full", hw_tree_full(train, test))
+    print("random forests", hw_randomforests(train, test))
