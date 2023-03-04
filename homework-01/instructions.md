@@ -24,7 +24,7 @@ Apply the developed methods to the `tki-resistance.csv` FTIR spectral data set. 
 
 1. In function `hw_tree_full`, build a tree with `min_samples`=2. Return misclassification rates and standard errors (to quantify uncertainty) on training and testing data.
 
-2. In function `hw_randomforest`, use random forests with `n`=100 trees with min_samples=2. Return misclassification rates and standard errors (to quantify uncertainty) on training and testing data.
+2. In function `hw_randomforests`, use random forests with `n`=100 trees with min_samples=2. Return misclassification rates and standard errors (to quantify uncertainty) on training and testing data.
 
 As a rough guideline, building the full tree on this data set should take less than 10 seconds - more shows inefficiencies in the implementation. Likewise, computing random forest variable importance for all variables should be faster than building the random forest.
 
