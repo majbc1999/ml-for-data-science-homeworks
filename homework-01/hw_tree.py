@@ -306,8 +306,24 @@ def return_train_and_test_data(path: str) -> tuple[np.array]:
     return train, test
 
 
+def standard_error(y_true: np.array, y_pred: np.array) -> float:
+    """
+    Returns standard error between two vectors, `y_true` and `y_pred`
+    """
+    n = len(y_true)
+    squared_error = np.sum((y_true - y_pred) ** 2)
+    return np.sqrt(squared_error / (n - 1)) / np.sqrt(n)
+
+
+def misclassification_rate(y_true: np.array, y_pred: np.array) -> float:
+    """
+    Returns missclasification rate for two vectors, `y_true` and `y_pred`
+    """
+    return np.mean(y_true != y_pred)
+
+
 def hw_tree_full(train: tuple[np.array],
-                 test: tuple[np.array]) -> dict:
+                 test: tuple[np.array]) -> tuple:
     """
     Returns missclassification rate, standard error for train and test data
     for Decision Trees training
@@ -319,26 +335,13 @@ def hw_tree_full(train: tuple[np.array],
 
     trained_tree = tree.build(train_X, train_y)
     pred_y_test = trained_tree.predict(test_X)
+    pred_y_train = trained_tree.predict(train_X)
 
     # Missclassification for test data
-    count = 0
-    for i in range(len(test_y)):
-        if test_y[i] == pred_y_test[i]:
-            count += 1
-    test_ms = 1 - count / len(test_y)
+    test_ms = misclassification_rate(test_y, pred_y_test)
 
     # Missclassification for train data
-    count = 0
-    pred_y_train = trained_tree.predict(train_X)
-    for i in range(len(train_y)):
-        if train_y[i] == pred_y_train[i]:
-            count += 1
-    train_ms = 1 - count / len(train_y)
-
-    # Standard error
-    def standard_error(y_true, y_pred):
-        error = np.abs(y_true - y_pred)
-        return np.mean(error)
+    train_ms = misclassification_rate(train_y, pred_y_train)
 
     train_se = standard_error(train_y, pred_y_train)
     test_se = standard_error(test_y, pred_y_test)
@@ -347,7 +350,7 @@ def hw_tree_full(train: tuple[np.array],
 
 
 def hw_randomforests(train: tuple[np.array],
-                     test: tuple[np.array]) -> dict:
+                     test: tuple[np.array]) -> tuple:
     """
     Returns missclassification rate, standard error for train and test data
     for Decision Trees training
@@ -359,26 +362,13 @@ def hw_randomforests(train: tuple[np.array],
     trained_forest = forest.build(train_X, train_y)
 
     pred_y_test = trained_forest.predict(test_X)
+    pred_y_train = trained_forest.predict(train_X)
 
     # Missclassification for test data
-    count = 0
-    for i in range(len(test_y)):
-        if test_y[i] == pred_y_test[i]:
-            count += 1
-    test_ms = 1 - count / len(test_y)
+    test_ms = misclassification_rate(test_y, pred_y_test)
 
     # Missclassification for train data
-    count = 0
-    pred_y_train = trained_forest.predict(train_X)
-    for i in range(len(train_y)):
-        if train_y[i] == pred_y_train[i]:
-            count += 1
-    train_ms = 1 - count / len(train_y)
-
-    # Standard error
-    def standard_error(y_true, y_pred):
-        error = np.abs(y_true - y_pred)
-        return np.mean(error)
+    train_ms = misclassification_rate(train_y, pred_y_train)
 
     train_se = standard_error(train_y, pred_y_train)
     test_se = standard_error(test_y, pred_y_test)
@@ -386,8 +376,21 @@ def hw_randomforests(train: tuple[np.array],
     return (train_ms, train_se), (test_ms, test_se)
 
 
+def random_forests_importance(train: tuple[np.array]) -> dict:
+    """
+    Returns importance variables for 
+    """
+    train_X, train_y = train
+
+    forest = RandomForest(rand=random.Random(), n=100)
+    trained_forest = forest.build(train_X, train_y)
+
+    return trained_forest.importance()
+
+
 if __name__ == "__main__":
     train, test = return_train_and_test_data('homework-01/tki-resistance.csv')
 
-    print("full", hw_tree_full(train, test))
-    print("random forests", hw_randomforests(train, test))
+    #print("full", hw_tree_full(train, test))
+    #print("random forests", hw_randomforests(train, test))
+    print("importance", random_forests_importance(train))
