@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import random
 import warnings
@@ -178,7 +179,7 @@ def recursively_predict(x: np.array, tree: TreeNode):
 
 class Tree:
     """
-    Classification tree skeleton.
+    Classification tree skeleton
     """
 
     def __init__(self, rand: random.Random = None,
@@ -193,7 +194,7 @@ class Tree:
 
     def build(self, X: np.array, y: np.array) -> TreeNode:
         """
-        Build the tree.
+        Build the tree
         """
         return recursively_build(X, y, self.min_samples,
                                  self.get_candidate_columns, self.rand)
@@ -204,12 +205,16 @@ class RFModel:
     An instance of classification trees, built on data, ready to predict
     """
 
-    def __init__(self, trees: list[TreeNode], X: np.array, y: np.array):
+    def __init__(self, trees: list[TreeNode], X: np.array, y: np.array, rand: random.Random):
         self.trees = trees
         self.X = X
         self.y = y
+        self.rand = rand
 
     def predict(self, X: np.array) -> np.array:
+        """
+        Return predictions for input dataset X
+        """
         predictions = []
 
         for tree in self.trees:
@@ -230,7 +235,6 @@ class RFModel:
         Return an array of attribute importance. 
         Each element is importance of i-th attribute.
         """
-
         missclasified_original = 0
         N = len(self.trees) * len(self.X)
 
@@ -245,7 +249,7 @@ class RFModel:
         for i in range(len(self.X[0])):
             # create new_X, same as X, only with i-th column shuffled randomly
             new_X = np.copy(self.X)
-            np.random.shuffle(new_X[:, i])
+            self.rand.shuffle(new_X[:, i])
 
             missclasified_permuted = 0
 
@@ -262,6 +266,9 @@ class RFModel:
 
 
 class RandomForest:
+    """
+    Random forest skeleton
+    """
 
     def __init__(self, rand: random.Random = None, n: int = 50):
         self.n = n
@@ -275,27 +282,26 @@ class RandomForest:
         for _ in range(self.n):
             tree = self.rftree.build(X, y)
             trees.append(tree)
-        return RFModel(trees, X, y)
+        return RFModel(trees, X, y, self.rand)
 
-
-###############################################################################
-#                            PART 2: calculations                             #
-###############################################################################
 
 def import_dataset_to_np(path: str) -> tuple[np.array]:
     """
     Imports dataset from `.csv` file.
 
     Takes first n-1 columns as attributes and last column as target.
-    Returns tuple of X, y
+    Returns tuple of X, y and legend
     """
     X = np.genfromtxt(path, delimiter=',')
     y = np.genfromtxt(path, delimiter=',', dtype=str)
-    return (X[1:, :-1], y[1:, -1])
+    return (X[1:, :-1], y[1:, -1], y[:1, :-1][0])
 
 
 def return_train_and_test_data(path: str) -> tuple[np.array]:
-    X, y = import_dataset_to_np(path)
+    """
+    Import data and return relevant `np.arrays`
+    """
+    X, y, _ = import_dataset_to_np(path)
 
     # Change to binary
     y = np.where(y == 'Bcr-abl', 1, 0)
@@ -389,8 +395,25 @@ def random_forests_importance(train: tuple[np.array]) -> dict:
 
 
 if __name__ == "__main__":
+    # Import data in standard form
     train, test = return_train_and_test_data('homework-01/tki-resistance.csv')
 
-    #print("full", hw_tree_full(train, test))
-    #print("random forests", hw_randomforests(train, test))
-    print("importance", random_forests_importance(train))
+    # Build full tree and a forest
+    print("full", hw_tree_full(train, test))
+    print("random forests", hw_randomforests(train, test))
+
+    # Calculate importance
+    importance = random_forests_importance(train)
+    print("importance", importance[:3], '...')
+
+    # Import legend and convert it to numeric
+    _, _, legend = import_dataset_to_np('homework-01/tki-resistance.csv')
+    legend = legend.astype(float)
+
+    # Figure drawing
+    plt.figure('Attribute importance')
+    plt.scatter(x=legend, y=100 * importance, c='tab:olive')
+    plt.xlabel('variables')
+    plt.ylabel('percent increase')
+    plt.title('Variable importance')
+    plt.savefig('homework-01/importance.png')
