@@ -2,39 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from data_gen import toy_data, log_loss
-from loss_variability_due_to_data import \
-    model_risks, confidence_interval_of_model_risk, median_standard_error
+from aux_functions import toy_data, split_dataset, model_risks, \
+    confidence_interval_of_model_risk, median_standard_error
 from sklearn.linear_model import LogisticRegression
-
-
-def split_dataset(dataset, seed):
-    """Split a dataset into two datasets at random.
-
-    Parameters
-    ----------
-    dataset : pandas.DataFrame
-        The dataset to split.
-    seed : int
-        The seed to use for the random number generator.
-
-    Returns
-    -------
-    dataset1 : pandas.DataFrame
-        The first dataset.
-    dataset2 : pandas.DataFrame
-        The second dataset.
-    """
-    np.random.seed(seed)
-    indices = np.random.permutation(len(dataset))
-    dataset1 = dataset.iloc[indices[:50]]
-    dataset2 = dataset.iloc[indices[50:]]
-    return dataset1, dataset2
 
 
 if __name__ == '__main__':
     # 1. Generate a toy dataset with 100 observations
-    toy_dataset = toy_data(100, seed=2)
+    toy_dataset = toy_data(100, seed=1)
 
     # 2. Train model h0 using some learner on all 100 observations and compute
     # its true risk proxy using the huge dataset.
@@ -43,7 +18,7 @@ if __name__ == '__main__':
     y = np.array(toy_dataset['y'])
     h0 = LogisticRegression().fit(X, y)
 
-    huge_dataset = toy_data(100000, seed=1001)
+    huge_dataset = toy_data(100000, seed=0)
     huge_X = np.vstack(huge_dataset['x'].to_numpy())
     huge_y = np.array(huge_dataset['y'])
 
@@ -59,8 +34,7 @@ if __name__ == '__main__':
     risk_estimates = []
 
     for i in range(1000):
-        j = 2000 + i
-        toy_dataset1, toy_dataset2 = split_dataset(toy_dataset, seed=j)
+        toy_dataset1, toy_dataset2 = split_dataset(toy_dataset, seed=i)
 
         X_1 = np.vstack(toy_dataset1['x'].to_numpy())
         X_2 = np.vstack(toy_dataset2['x'].to_numpy())
@@ -86,7 +60,7 @@ if __name__ == '__main__':
     plt.figure(figsize=(8, 6))
     sns.displot(differences, kind='kde')
     plt.title('Distribution of risk differences')
-    plt.xlabel('est_risk -  true_risk')
+    plt.xlabel('est_risk - true_risk')
     plt.ylabel('Density')
     plt.savefig('homework-02/plots/risk_differences_2.png',
                 bbox_inches='tight')
