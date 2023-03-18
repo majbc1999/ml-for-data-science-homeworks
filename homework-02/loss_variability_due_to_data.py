@@ -127,7 +127,8 @@ if __name__ == "__main__":
     plt.title('Distribution of risk differences')
     plt.xlabel('est_risk -  true_risk')
     plt.ylabel('Density')
-    plt.savefig('homework-02/risk_differences_1.png', bbox_inches='tight')
+    plt.savefig('homework-02/plots/risk_differences_1.png',
+                bbox_inches='tight')
 
     # Compute the true risk proxy
     print(f'True risk proxy: {true_risk_proxy}')

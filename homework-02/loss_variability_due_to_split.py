@@ -8,7 +8,6 @@ from loss_variability_due_to_data import \
 from sklearn.linear_model import LogisticRegression
 
 
-
 def split_dataset(dataset, seed):
     """Split a dataset into two datasets at random.
 
@@ -32,11 +31,12 @@ def split_dataset(dataset, seed):
     dataset2 = dataset.iloc[indices[50:]]
     return dataset1, dataset2
 
+
 if __name__ == '__main__':
     # 1. Generate a toy dataset with 100 observations
     toy_dataset = toy_data(100, seed=2)
 
-    # 2. Train model h0 using some learner on all 100 observations and compute 
+    # 2. Train model h0 using some learner on all 100 observations and compute
     # its true risk proxy using the huge dataset.
 
     X = np.vstack(toy_dataset['x'].to_numpy())
@@ -88,7 +88,8 @@ if __name__ == '__main__':
     plt.title('Distribution of risk differences')
     plt.xlabel('est_risk -  true_risk')
     plt.ylabel('Density')
-    plt.savefig('homework-02/risk_differences_2.png', bbox_inches='tight')
+    plt.savefig('homework-02/plots/risk_differences_2.png',
+                bbox_inches='tight')
 
     ci_contains_true_risk = count / 1000
 
