@@ -14,22 +14,33 @@
 
 \maketitle
 
+\section*{Code description and instructions}
+This homework was coded in programming language \texttt{Python}, version \texttt{3.11}, although it should work in some older versions as well. The only packages used for this homework were 
+\begin{itemize}
+    \item \texttt{numpy} and \texttt{pandas} for data processing, 
+    \item \texttt{sklearn} for logistic regression model,
+    \item \texttt{seaborn} and \texttt{matplotlib} for plotting.
+\end{itemize}
+
+The code is organized so that every part of this report is in a separated script (which is accordingly named) and all auxiliary functions are imported from file \texttt{aux\_functions.py}.
+
+
 \section{Setup: a proxy for true risk}
 
 First we generated the toy dataset of 100.000 rows. As we were coding this homework in \texttt{Python}, we had to write the \texttt{toy\_data} and the \texttt{log\_loss} functions from scratch. 
 
 
-We generated 100.000 rows of data and stated that it is enough, to safely reduce the error to the first decimal digit. We can see this by estimating at the margin of error or standard error of the sample mean. \textbf{Margin of error} can be calculated as 
+We generated 100.000 rows of data and stated, that it is enough, to safely reduce the error to the first decimal digit. We can see this by estimating the margin of error or standard error of the sample mean. \textbf{Margin of error} can be calculated as 
 $$ME = \frac{z \cdot s}{\sqrt{n}},$$
 where $s$ is the sample standard deviation, $n$ is the sample size and $z$ is the z-score (1.96 for 95\% confidence interval).
-We want to have $ME < 0.0005$ (for accuracy to the 3rd decimal digit with 95\% confidence). We can also assume a large value for $s$, such as 0.5. If we insert the numbers, we can see, that $n=100000$ is enough to have $ME < 0.0005$.
+We want to have $ME <= 0.0005$ (for accuracy to the 3rd decimal digit with 95\% confidence). We can also assume a large value for $s$, such as 0.5. If we insert the numbers, we can see, that $n=100.000$ is enough to have $ME <= 0.0005$.
 
 
 \section{Holdout estimation}
 
 \subsection{Model loss estimator variability due to test data variability}
 
-In this part of the homework, we wanted to test our, how true risk of a model differs to estimated risk, calculated on test data. The output of my code is printed below and the plot of estimated risk differences is drawn in Figure \ref{fig:risk_differences_1}:
+In this part of the homework, we wanted to test, how true risk of a model differs to estimated risk, calculated on test data. The output of my code is printed below and the plot of estimated risk differences is drawn in Figure \ref{fig:risk_differences_1}:
 
 \begin{lstlisting}[basicstyle=\small\ttfamily]
 True risk proxy:            0.4853
@@ -39,14 +50,14 @@ Median standard error:      0.0592
 Percentage of 95CI that contain the true risk proxy: 93.1
 \end{lstlisting}
 
-\begin{figure}
+\begin{figure}[h]
     \centering
     \includegraphics[width=0.5\textwidth]{homework-02/plots/risk_differences_1.png}
     \caption{Density estimate of the differences between estimates and the true risk proxy}
     \label{fig:risk_differences_1}
 \end{figure}
 
-From the results, we can conclude, that sometimes holdout estimation overestimates the risk and sometimes it underestimates it. The mean difference is very close to 0, from which we can see, that holdout estimation does indeed return expected risk same as the true one (if we performed estimation enough times, we could get as close as needed to true risk). So, in practice, we could estimate true risk proxy as accurately as needed by repeating this procedure more and more times.
+From the results, we can conclude, that sometimes holdout estimation overestimates the risk and sometimes it underestimates it. The mean difference is very close to 0, from which we can see, that holdout estimation does indeed return expected risk same as the true one (if we performed estimation enough times on different data, we could get as close as needed to true risk). So, in practice, we could estimate true risk proxy as accurately as needed by repeating this procedure more and more times.
 
 If the training set would be bigger, mean difference would drop even more (because larger training set would learn the model more accurately). The median standard error of estimations would also decrease. Number of times, that the confidence interval contains the true risk proxy would also increase with larger testing set (as the training set would now represent the population even better). Similarly, with a smaller training set, the effect would be the other way around.
 
@@ -63,11 +74,19 @@ Mean:           0.0381
 Maximum:        0.1265  
 \end{lstlisting}
 
-We can see, that almost every time, we achieved better predictions (smaller risk), if testing on additional 50 data occurrences. If both datasets would be bigger (and difference in size would remain the same), the difference of risks would start to get smaller, as additional samples would not change the prediction that much (as population would already be well represented). Similarly, if both datasets were smaller, each individual training sample would contribute more towards final prediction, and differences in models' risks would be bigger.
+We can see, that almost every time, we achieved better predictions (smaller risk), if training on additional 50 data occurrences. If both datasets would be bigger (and difference in size would remain the same), the difference of risks would start to get smaller, as additional samples would not change the prediction that much (as population would already be well represented). Similarly, if both datasets were smaller, each individual training sample would contribute more towards final prediction, and differences in models' risks would be bigger.
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{homework-02/plots/risk_differences_2.png}
+    \caption{Density estimate of the differences between estimates and the true risk proxy}
+    \label{fig:risk_differences_2}
+\end{figure}
 
 \subsection{Loss estimator variability due to split variability}
 
-Here, we generated a toy dataset of size 100, calculated a true risk proxy. Then we split the dataset into training and test and then trained another model on training data. We estimated original model's risk (model trained on data of size 100) by testing on test data. Code output was:
+Here, we generated a toy dataset of size 100 and calculated the true risk proxy. Then we split the dataset into training and test and then trained another model on training data. We estimated original model's risk (model trained on data of size 100) by testing on test data. Code output was:
+
 
 \begin{lstlisting}[basicstyle=\small\ttfamily]
 True risk proxy:        0.4933
@@ -78,12 +97,6 @@ Percentage of 95CI that contain the true risk proxy: 97.8
 
 We plotted difference between estimated risk and true risk in Figure \ref{fig:risk_differences_2}.
 
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\textwidth]{homework-02/plots/risk_differences_2.png}
-    \caption{Density estimate of the differences between estimates and the true risk proxy}
-    \label{fig:risk_differences_2}
-\end{figure}
 
 We can conclude, that if the data would be bigger, estimated risk would also get closer to true risk. Mean difference and median standard error would decrease.
 
@@ -119,17 +132,13 @@ Median standard error:                          0.0027
 Confidence interval contains true risk proxy:   32.0%
 \end{lstlisting}
 
-If we compare different estimators, we can conclude, that 2-fold cross validation generated biggest mean difference in comparison to other estimators, as well as the biggest standard error. Best model in terms of mean difference and also median standard error is leave-one-out, which was well expected. However, for practical purposes, it is important to point out, that leave-one-out model is by far the most time consuming one. 
+If we compare different estimators, we can conclude, that 2-fold cross validation generated biggest mean difference in comparison to other estimators, as well as the biggest median standard error. Best model in terms of mean difference and also median standard error is leave-one-out, which was well expected. However, for practical purposes, it is important to point out, that leave-one-out model is by far the most time consuming one. 
 
 If we compare 10-fold cross validation and 10-fold cross validation repeated 20 times, we can see almost no difference in term of median standard error or mean difference.
 
-Plots of risk differences can be seen in Figures \ref{fig:cross-fold}
+Plots of risk differences can be seen in Figure \ref{fig:cross-fold}.
 
-\subsection{A different scenario}
-
-I did not code this part of the exercise. 
-
-\begin{figure}
+\begin{figure}[!h]
     \centering
     \subfigure[2-fold]{\includegraphics[width=0.4\textwidth]{homework-02/plots/estimator_2-fold.png}}
     \subfigure[4-fold]{\includegraphics[width=0.4\textwidth]{homework-02/plots/estimator_4-fold.png}}
@@ -140,6 +149,9 @@ I did not code this part of the exercise.
     \label{fig:cross-fold}
 \end{figure}
 
+\subsection{A different scenario}
+
+I did not code this part of the exercise. I did, however, find an article \cite{kohavi1995relationship}, which states, that leave-one-out technique may provide a poor estimate of model performance for dataset with very high variance (because of overfitting).
 
 \printbibliography
 
