@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import unittest
 from scipy.optimize import minimize
+import matplotlib.pyplot as plt
 
 
 class RidgeReg:
@@ -207,21 +208,29 @@ def load(fname: str) -> tuple:
 
 def superconductor(X_train, y_train, X_test, y_test):
     # Grid search for optimal regularization weight
-    weights = np.linspace(-4, 4, num=800)
+    weights = np.linspace(-3, 3, num=1000)
     errors = []
 
     for w in weights:
         model = RidgeReg(weight=w)
         model.fit(X_train, y_train)
 
-        y_pred = model.predict(X_test)
-        err = rmse(y_test, y_pred)
+        y_pred = model.predict(X_train)
+        err = rmse(y_train, y_pred)
 
         errors.append(err)
+
+    # Draw the plot of errors
+    plt.figure()
+    plt.plot(weights, errors)
+    plt.xlabel("Weight")
+    plt.ylabel("RMSE")
+    plt.savefig("homework-03/plots/ridge.png")
 
     # Best weight
     weight_index = np.argmin(errors)
     weight = weights[weight_index]
+    minimal_error = np.min(errors)
 
     # Train model with best weight
     model = RidgeReg(weight=weight)
@@ -231,7 +240,7 @@ def superconductor(X_train, y_train, X_test, y_test):
     y_pred = model.predict(X_test)
     err = rmse(y_test, y_pred)
 
-    return weight, err
+    return weight, err, minimal_error
 
 
 if __name__ == "__main__":
@@ -241,10 +250,11 @@ if __name__ == "__main__":
     
     # Run the ridge regression on superconductor data,
     # find the best weight and print the RMSE estimate
-    weight, err = superconductor(X_train, y_train, X_test, y_test)
-
+    weight, err, minimal_error = \
+        superconductor(X_train, y_train, X_test, y_test)
     print("Best weight:", weight)
-    print("RMSE estimate:", err)
+    print("Error on training set:", minimal_error)
+    print("Error on testing set:", err)
 
     # Run the tests
     unittest.main()
