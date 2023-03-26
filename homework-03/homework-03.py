@@ -208,7 +208,7 @@ def load(fname: str) -> tuple:
 
 def superconductor(X_train, y_train, X_test, y_test):
     # Grid search for optimal regularization weight
-    weights = np.linspace(-3, 3, num=1000)
+    weights = np.linspace(0, 3, num=1000)
     errors = []
 
     for w in weights:
