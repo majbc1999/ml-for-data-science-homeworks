@@ -4,14 +4,18 @@ from typing import Union
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.optimize import fmin_l_bfgs_b
+import random
 
 # PART I: models
 
 # multinomial logistic regression
+
+
 class MultinomialLogReg:
     """
     Multinomial logistic regression model.
     """
+
     def __init__(self) -> None:
         """
         Initialize the model.
@@ -25,7 +29,7 @@ class MultinomialLogReg:
         """
         # Make sure that z has lowest possible values for numerical stability
         # Although that is not necessary as we have a reference class anyway
-        u -= np.min(u)
+        u -= np.max(u)
 
         # Compute softmax
         exp_ = np.exp(u)
@@ -34,16 +38,16 @@ class MultinomialLogReg:
         return exp_ / sum_
 
     def _neg_log_likelihood(self, coef: np.ndarray,
-                                  X: np.ndarray, 
-                                  y: np.ndarray,
-                                  with_ref_class: bool = True) -> float:
+                            X: np.ndarray,
+                            y: np.ndarray,
+                            with_ref_class: bool = True) -> float:
         """
         Returns the log likelihood of the model.
         """
         coef = coef.reshape((self.n_classes - 1, X.shape[1]))
         # Append a vector of zeros to the beginning for the reference class
         if with_ref_class:
-            coef = np.vstack([np.zeros((1, coef.shape[1])), coef])      
+            coef = np.vstack([np.zeros((1, coef.shape[1])), coef])
 
         neg_log_likelihood = 0
         for index, x in enumerate(X):
@@ -69,12 +73,12 @@ class MultinomialLogReg:
         bounds = [(None, None) for _ in range(self.coef.size)]
 
         # Run gradient descent
-        new_coef = fmin_l_bfgs_b(self._neg_log_likelihood, 
-                                 self.coef.flatten(), 
-                                 args=(X, y), 
+        new_coef = fmin_l_bfgs_b(self._neg_log_likelihood,
+                                 self.coef.flatten(),
+                                 args=(X, y),
                                  bounds=bounds,
                                  approx_grad=True)[0]
-        
+
         # Reshape and store coefficients
         self.coef = new_coef.reshape(self.n_classes - 1, X.shape[1])
 
@@ -86,7 +90,7 @@ class MultinomialLogReg:
         # Check if model is built
         if self.coef is None:
             raise Exception("Model not yet built")
-        
+
         # Add a column of ones for the intercept
         X = np.hstack([X, np.ones((X.shape[0], 1))])
 
@@ -106,6 +110,8 @@ class MultinomialLogReg:
         return self._softmax(u)
 
 # ordinal logistic regression
+
+
 class OrdinalLogReg:
     """
     Ordinal logistic regression model.
@@ -118,7 +124,7 @@ class OrdinalLogReg:
         self.n_classes = None
         self.coef = None    # coefficients
         self.t = None       # thresholds
-        self._deltas = None # threshold deltas
+        self._deltas = None  # threshold deltas
 
     def _deltas_to_thresholds(self, deltas: np.ndarray) -> np.ndarray:
         """
@@ -135,8 +141,8 @@ class OrdinalLogReg:
         return t
 
     def _neg_log_likelihood(self, coef_and_deltas: np.ndarray,
-                                  X: np.ndarray, 
-                                  y: np.ndarray) -> float:
+                            X: np.ndarray,
+                            y: np.ndarray) -> float:
         """
         Returns the log likelihood of the model.
         """
@@ -178,21 +184,21 @@ class OrdinalLogReg:
 
         if self.n_classes < 3:
             return ValueError("Invalid number of classes."
-                             "Ordinal logistic regression only"
-                             "makes sense for 3 or more classes.")
+                              "Ordinal logistic regression only"
+                              "makes sense for 3 or more classes.")
 
         # Add a column of ones for the intercept
         X = np.hstack([X, np.ones((len(X), 1))])
 
         # Initialize coefficients
         self.coef = np.zeros(len(X[0]))
-        
+
         # Initialize deltas for thresholds
         self._deltas = np.ones(self.n_classes - 2)
 
         # Optimization bounds
         bounds = [(None, None) for _ in range(self.coef.size)] + \
-                    [(0.01, None) for _ in range(self._deltas.size)]
+            [(0.01, None) for _ in range(self._deltas.size)]
 
         # Concatenate coefficients and deltas
         coef_and_deltas = np.concatenate((self.coef, self._deltas))
@@ -226,7 +232,7 @@ class OrdinalLogReg:
 
         # Return self
         return self
-        
+
     def _CDF(self, x: Union[float, str]) -> float:
         """
         CDF of the standard logistic distribution.
@@ -245,7 +251,7 @@ class OrdinalLogReg:
         # Check if model is built
         if self.coef is None:
             raise Exception("Model not yet built")
-    
+
         # Add a column of ones for the intercept
         X = np.hstack([X, np.ones((X.shape[0], 1))])
 
@@ -257,18 +263,18 @@ class OrdinalLogReg:
             )
         return np.array(predictions)
 
-    def _predict_single_sample(self, 
-                              x: np.array,
-                              t: np.array,
-                              coef: np.array) -> np.array:
+    def _predict_single_sample(self,
+                               x: np.array,
+                               t: np.array,
+                               coef: np.array) -> np.array:
         """
         Predicts the probabilities of each class.
         """
         # Check if model is built
-        
+
         if coef is None:
             raise ValueError("Model not yet built")
-        
+
         else:
             probs = []
             u_i = coef.T @ x
@@ -281,7 +287,6 @@ class OrdinalLogReg:
                 )
             return np.array(probs)
 
-
 # PART II: application
 
 def draw_dependancy(df1: pd.Series, df2: pd.Series, names: tuple) -> None:
@@ -291,7 +296,7 @@ def draw_dependancy(df1: pd.Series, df2: pd.Series, names: tuple) -> None:
     # Merge two series into one dataframe
     df = pd.concat([df1, df2], axis=1)
     df.columns = [names[0], names[1]]
-    
+
     # Count proportion of x values for each y value
     df = df.groupby(names[0]).count()
     df = df / df.sum()
@@ -311,7 +316,7 @@ def data_preparation(path: str, numpy: bool = True, only_import: bool = False):
     """
     df = pd.read_csv(path, sep=';')
 
-    # We have to convert discrete variables into numeric 
+    # We have to convert discrete variables into numeric
     # in order to use them in our model
 
     # 1. shot type to numeric
@@ -333,12 +338,20 @@ def data_preparation(path: str, numpy: bool = True, only_import: bool = False):
             return 4
         elif x == 'tip-in':
             return 5
-        else: 
+        else:
             raise Exception("Invalid shot type")
 
     def competition_to_num(x: str) -> int:
         """
-        Converts competition to numeric      
+        Converts competition to numeric.
+
+        U14 and U16 are not so different as they have players with only 2 years
+        difference, so we can map them to similar numbers.
+
+        SLO1 and EURO are also similar, as they are both european leagues.
+
+        NBA is the most different, as it is the best league in the world, with 
+        slightly different rules, so we map it to the highest number.   
         """
         if x == 'U14':
             return 1
@@ -354,32 +367,49 @@ def data_preparation(path: str, numpy: bool = True, only_import: bool = False):
             raise Exception("Invalid competition type")
 
     def player_type_to_num(x: str) -> int:
-        """Converts player type to numeric"""
+        """
+        Converts player type to numeric
+        
+        Center is the most different player, as he almost never shoots from 
+        distance and always plays under the basket, so we map him to the lowest
+        number.
+
+        Guard and forward are similar, as they both play on the perimeter and
+        shoot from distance, so we map them to similar numbers.
+        """
         if x == 'G':
-            return 0
+            return 4
         elif x == 'F':
-            return 1
+            return 3
         elif x == 'C':
-            return 5
+            return 1
         else:
             raise Exception("Invalid player type")
 
-    # transition doesn't need to be converted as it has only 2 values
+    # transition doesn't need to be converted as it has only 2 values, it will
+    # anyway be normalized later
+
     # same for two_legged and made_shot
 
     def movement_to_num(x: str) -> int:
-        """Converts movement to numeric"""
+        """
+        Converts movement to numeric.
+
+        No movement is the most different so it is mapped to 1. Dribble or 
+        cut and drive both resemble movement, so they are mapped to similar
+        numbers.
+        """
         if x == 'no':
             return 1
         elif x == 'dribble or cut':
-            return 2
-        elif x == 'drive':
             return 3
+        elif x == 'drive':
+            return 4
         else:
             raise Exception("Invalid movement type")
 
     # angle and distance can stay the same for now
-    
+
     if not only_import:
         df['ShotType'] = df['ShotType'].map(shot_type_to_num)
         df['Competition'] = df['Competition'].map(competition_to_num)
@@ -388,7 +418,7 @@ def data_preparation(path: str, numpy: bool = True, only_import: bool = False):
 
     y = df['ShotType']
     X = df.drop(['ShotType'], axis=1)
-    
+
     cols = list(X.columns)
 
     # convert to numpy array
@@ -397,6 +427,70 @@ def data_preparation(path: str, numpy: bool = True, only_import: bool = False):
         y = y.to_numpy()
 
     return X, y, cols
+
+def normalize_data(X: np.array):
+    """
+    Normalizes the given dataset by subtracting the mean and dividing by the standard deviation
+    :param X: The dataset to be normalized
+    :return: The normalized dataset
+    """
+    X_norm = (X - np.mean(X, axis=0)) / np.std(X, axis=0)
+    return X_norm
+
+def resample(X: np.array, y: np.array, n_samples: int) -> tuple:
+    """
+    Samples n_samples from the given dataset X and y with replacement
+    """
+    # sample indices
+    indices = np.random.choice(len(X), n_samples, replace=True)
+
+    # sample data
+    X_sample = X[indices]
+    y_sample = y[indices]
+
+    # add one made up instance of each class, to make sure we have all classes
+    for i in range(6):
+        if i not in y_sample:
+            X_sample = np.vstack((X_sample, np.ones(len(X[0]))))
+            y_sample = np.append(y_sample, i)
+
+    return X_sample, y_sample
+
+def bootstrap_confidence_interval(X: np.array, y: np.array,
+                                  n: int = 100, m: int = 50) -> list:
+    """
+    Calculates the confidence interval for coefficients the given model 
+    using the bootstrap method. We build the model n times on m randomly 
+    sampled data.
+    """
+    coef = []
+
+    # build model n times
+    for i in range(n):
+        model = MultinomialLogReg()
+        # sample data
+        X_sample, y_sample = resample(X, y, n_samples=m)
+
+        # build model
+        model = model.build(X_sample, y_sample)
+        print(f'Finished: {i+1}/{n}', end='\r')
+
+        # append coefficients
+        coef.append(model.coef)
+
+    # calculate confidence interval for each coefficient
+    confidence = []
+
+    for i in range(len(coef[0])):
+        row = []
+        for j in range(len(coef[0][0])):
+            # get all coefficients for i-th feature
+            coef_i = [coef[k][j][i] for k in range(n)]
+            # calculate 5% confidence interval
+            row.append(np.percentile(coef_i, [2.5, 97.5]))
+        confidence.append(row)
+
+    return confidence
 
 def multinomial_bad_ordinal_good():
     return
@@ -407,12 +501,45 @@ MBOG_TRAIN = 100
 
 if __name__ == '__main__':
     # here we go
-    X, y, cols = data_preparation('homework-04/dataset.csv', numpy=False, 
-                                  only_import = True)
-
-    # draw dependancy between two columns
-    for col in cols:
-        #draw_dependancy(y, X[col], ('ShotType', col))
-        pass
-
     X, y, cols = data_preparation('homework-04/dataset.csv')
+
+    #   # normalize dataset
+    #   # X = normalize_data(X)
+
+    #   # build model
+    #   model = MultinomialLogReg().build(X[-50:], y[-50:])
+
+    #   # map shot types to names
+    #   shots = ['above head (reference class)', 'layup',
+    #            'other', 'hook shot', 'dunk', 'tip-in']
+
+    #   model.coef = np.round(model.coef, decimals=3)
+
+    #   # make pandas dataframe
+    #   df = pd.DataFrame(model.coef)
+    #   df['shot type'] = shots
+    #   df = df.rename(columns={0: 'Competition',
+    #                           1: 'PlayerType',
+    #                           2: 'Transition',
+    #                           3: 'TwoLegged',
+    #                           4: 'Movement',
+    #                           5: 'Angle',
+    #                           6: 'Distance',
+    #                           7: 'Intercept'})
+
+    #   # Put shot type to the beginning
+    #   cols = df.columns.tolist()
+    #   cols = cols[-1:] + cols[:-1]
+    #   df = df[cols]
+
+    #   # set column shot type as index
+    #   df = df.set_index('shot type')
+
+    #   # print coefficients
+    #   print(df)
+    #print()    
+    # calculate confidence interval
+    
+    print('Calculating confidence interval...')
+    confidence = bootstrap_confidence_interval(X, y, n=200, m=50)
+
