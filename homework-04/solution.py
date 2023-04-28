@@ -49,6 +49,7 @@ class MultinomialLogReg:
             coef = coef.reshape((self.n_classes, X.shape[1]))
 
         neg_log_likelihood = 0
+
         for index, x in enumerate(X):
             probs = self._predict_single_sample(x, coef)
             true_class = y[index]
@@ -75,6 +76,7 @@ class MultinomialLogReg:
         new_coef = fmin_l_bfgs_b(self._neg_log_likelihood,
                                  self.coef.flatten(),
                                  args=(X, y),
+                                 factr=1e13,
                                  bounds=bounds,
                                  approx_grad=True)[0]
 
@@ -500,7 +502,6 @@ def bootstrap_confidence_interval(X: np.array, y: np.array,
 
         # append coefficients
         coef.append(model.coef)
-    print(f'Finished: {n}/{n}')
 
     # calculate confidence interval for each coefficient
     confidence = []
@@ -583,7 +584,7 @@ if __name__ == '__main__':
     X = normalize_data(X)
 
     # build model
-    model = MultinomialLogReg().build(X[-50:], y[-50:])
+    model = MultinomialLogReg().build(X, y)
 
     # map shot types to names
     shots = ['above head (reference class)', 'layup',
@@ -612,11 +613,12 @@ if __name__ == '__main__':
     df = df.set_index('shot type')
 
     # print coefficients
+    print('----------------------------------------')
     print('Coefficients:')
     print(df)
 
     # calculate confidence interval
-    confidence = bootstrap_confidence_interval(X, y, n=5, m=10)
+    confidence = bootstrap_confidence_interval(X, y, n=200, m=2000)
 
     for i in range(len(confidence)):
         for j in range(len(confidence[0])):
@@ -647,13 +649,14 @@ if __name__ == '__main__':
     df2 = df2.set_index('shot type')
 
     # print confidence interval
+    print('----------------------------------------')
     print('Confidence interval:')
     print(df2)
     
     # generate data
     X, y = multinomial_bad_ordinal_good(n_samples=MBOG_TRAIN+1000,
                                         rand=random.Random(x=42))
-
+    
     # split data
     X_train, X_test = X[:MBOG_TRAIN], X[MBOG_TRAIN:]
     y_train, y_test = y[:MBOG_TRAIN], y[MBOG_TRAIN:]
@@ -663,9 +666,9 @@ if __name__ == '__main__':
     model_multinomial = MultinomialLogReg().build(X_train, y_train)
 
     # compare log-likelihoods
+    print('----------------------------------------')
     print('Log-likelihoods:')
     print(f'    Multinomial: \t'
           f'{model_multinomial.log_likelihood(X_test, y_test)}')
     print(f'    Ordinal: \t \t'
           f'{model_ordinal.log_likelihood(X_test, y_test)}')
-
