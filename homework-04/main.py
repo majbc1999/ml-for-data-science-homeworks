@@ -2,15 +2,12 @@ import numpy as np
 import pandas as pd
 from typing import Union
 import matplotlib.pyplot as plt
-import seaborn as sns
 from scipy.optimize import fmin_l_bfgs_b
 import random
 
 # PART I: models
 
 # multinomial logistic regression
-
-
 class MultinomialLogReg:
     """
     Multinomial logistic regression model.
@@ -44,10 +41,12 @@ class MultinomialLogReg:
         """
         Returns the log likelihood of the model.
         """
-        coef = coef.reshape((self.n_classes - 1, X.shape[1]))
-        # Append a vector of zeros to the beginning for the reference class
         if with_ref_class:
+            coef = coef.reshape((self.n_classes - 1, X.shape[1]))
+            # Append a vector of zeros to the beginning for the reference class
             coef = np.vstack([np.zeros((1, coef.shape[1])), coef])
+        else:
+            coef = coef.reshape((self.n_classes, X.shape[1]))
 
         neg_log_likelihood = 0
         for index, x in enumerate(X):
@@ -109,9 +108,21 @@ class MultinomialLogReg:
         # Return class with highest probability
         return self._softmax(u)
 
+    def log_likelihood(self, X: np.ndarray, y: np.ndarray) -> float:
+        """
+        Returns the log likelihood of the model.
+        """
+        # Check if model is built
+        if self.coef is None:
+            raise Exception("Model not yet built")
+
+        # Add a column of ones for the intercept
+        X = np.hstack([X, np.ones((X.shape[0], 1))])
+
+        return - self._neg_log_likelihood(self.coef.flatten(), X, y, 
+                                          with_ref_class=False)
+
 # ordinal logistic regression
-
-
 class OrdinalLogReg:
     """
     Ordinal logistic regression model.
@@ -203,8 +214,6 @@ class OrdinalLogReg:
         # Concatenate coefficients and deltas
         coef_and_deltas = np.concatenate((self.coef, self._deltas))
 
-        print(coef_and_deltas)
-
         # Run gradient descent
         new_coef_and_deltas = fmin_l_bfgs_b(func=self._neg_log_likelihood,
                                             x0=coef_and_deltas,
@@ -226,9 +235,6 @@ class OrdinalLogReg:
         # Check length of thresholds
         if len(self.t) != self.n_classes + 1:
             raise Exception("Invalid number of thresholds")
-
-        print(self.t)
-        print(self.coef)
 
         # Return self
         return self
@@ -286,6 +292,23 @@ class OrdinalLogReg:
                     self._CDF(first) - self._CDF(second)
                 )
             return np.array(probs)
+
+    def log_likelihood(self, X: np.ndarray, y: np.ndarray) -> float:
+        """
+        Returns the log likelihood of the model.
+        """
+        # Check if model is built
+        if self.coef is None:
+            raise Exception("Model not yet built")
+
+        # Add a column of ones for the intercept
+        X = np.hstack([X, np.ones((X.shape[0], 1))])
+
+        # Build deltas and coefs
+        coef_and_deltas = np.concatenate((self.coef, self._deltas))
+
+        return -self._neg_log_likelihood(coef_and_deltas, X, y)
+
 
 # PART II: application
 
@@ -449,7 +472,7 @@ def resample(X: np.array, y: np.array, n_samples: int) -> tuple:
     y_sample = y[indices]
 
     # add one made up instance of each class, to make sure we have all classes
-    for i in range(6):
+    for i in np.unique(y):
         if i not in y_sample:
             X_sample = np.vstack((X_sample, np.ones(len(X[0]))))
             y_sample = np.append(y_sample, i)
@@ -460,7 +483,7 @@ def bootstrap_confidence_interval(X: np.array, y: np.array,
                                   n: int = 100, m: int = 50) -> list:
     """
     Calculates the confidence interval for coefficients the given model 
-    using the bootstrap method. We build the model n times on m randomly 
+    using the bootstrap method. We build the model `n` times on `m` randomly 
     sampled data.
     """
     coef = []
@@ -477,6 +500,7 @@ def bootstrap_confidence_interval(X: np.array, y: np.array,
 
         # append coefficients
         coef.append(model.coef)
+    print(f'Finished: {n}/{n}')
 
     # calculate confidence interval for each coefficient
     confidence = []
@@ -485,61 +509,163 @@ def bootstrap_confidence_interval(X: np.array, y: np.array,
         row = []
         for j in range(len(coef[0][0])):
             # get all coefficients for i-th feature
-            coef_i = [coef[k][j][i] for k in range(n)]
+            coef_i = [coef[k][i][j] for k in range(n)]
             # calculate 5% confidence interval
             row.append(np.percentile(coef_i, [2.5, 97.5]))
         confidence.append(row)
 
     return confidence
 
-def multinomial_bad_ordinal_good():
-    return
+def multinomial_bad_ordinal_good(n_samples: int = 100, rand: random.Random = None) -> tuple:
+    """
+    A data generating process of data, where ordinal logistic regression
+    performs beter than multinomial logistic regression.
+    
+    Dataset will have two attributes:
+        - last game points of this team (0, 1 or 2)
+        - last game points of oposing team (0, 1 or 2)
+        - strength of the team (0, 1)
+        - strength of the oposing team (0, 1)
+
+    Target variable will have 3 possible values, winning (2), losing (0) 
+    and drawing (1).
+    """
+
+    # Probabilities based on point difference
+    def return_probs(a: int, strength1: int, strength2: int) -> list:
+        if a <= -2:
+            p = [0.1, 0.1, 0.8]
+        elif a == -1:
+            p = [0.2, 0.3, 0.5]
+        elif a == 0:
+            p = [0.3, 0.4, 0.3]
+        elif a == 1:
+            p = [0.5, 0.3, 0.2]
+        elif a >= 2:
+            p = [0.8, 0.1, 0.1]
+        else:
+            return ValueError("Invalid point difference")
+        
+        if strength1 == strength2:
+            return p
+        elif strength1 > strength2:
+            return [p[0] + 0.1, p[1] - 0.05, p[2] - 0.05]
+        else:
+            return [p[0] - 0.05, p[1] - 0.05, p[2] + 0.1]
+
+    X = []
+    y = []
+
+    for _ in range(n_samples):
+        # randomly generate X
+        x1 = rand.choice([0, 1, 3])
+        x2 = rand.choice([0, 1, 3])
+        x3 = rand.choice([0, 1])
+        x4 = rand.choice([0, 1])
+
+        probs_for_y = return_probs(x1 - x2, x3, x4)
+
+        # sample with probabilities
+        X.append([x1, x2, x3, x4])
+        y.append(rand.choices([0, 1, 2], weights=probs_for_y)[0])
+
+    return np.array(X), np.array(y)
 
 
 # PART III
-MBOG_TRAIN = 100
+MBOG_TRAIN = 1000
 
 if __name__ == '__main__':
     # here we go
     X, y, cols = data_preparation('homework-04/dataset.csv')
 
-    #   # normalize dataset
-    #   # X = normalize_data(X)
+    # normalize dataset
+    X = normalize_data(X)
 
-    #   # build model
-    #   model = MultinomialLogReg().build(X[-50:], y[-50:])
+    # build model
+    model = MultinomialLogReg().build(X[-50:], y[-50:])
 
-    #   # map shot types to names
-    #   shots = ['above head (reference class)', 'layup',
-    #            'other', 'hook shot', 'dunk', 'tip-in']
+    # map shot types to names
+    shots = ['above head (reference class)', 'layup',
+             'other', 'hook shot', 'dunk', 'tip-in']
 
-    #   model.coef = np.round(model.coef, decimals=3)
+    model.coef = np.round(model.coef, decimals=3)
 
-    #   # make pandas dataframe
-    #   df = pd.DataFrame(model.coef)
-    #   df['shot type'] = shots
-    #   df = df.rename(columns={0: 'Competition',
-    #                           1: 'PlayerType',
-    #                           2: 'Transition',
-    #                           3: 'TwoLegged',
-    #                           4: 'Movement',
-    #                           5: 'Angle',
-    #                           6: 'Distance',
-    #                           7: 'Intercept'})
+    # make pandas dataframe
+    df = pd.DataFrame(model.coef)
+    df['shot type'] = shots
+    df = df.rename(columns={0: 'Competition',
+                            1: 'PlayerType',
+                            2: 'Transition',
+                            3: 'TwoLegged',
+                            4: 'Movement',
+                            5: 'Angle',
+                            6: 'Distance',
+                            7: 'Intercept'})
 
-    #   # Put shot type to the beginning
-    #   cols = df.columns.tolist()
-    #   cols = cols[-1:] + cols[:-1]
-    #   df = df[cols]
+    # Put shot type to the beginning
+    cols = df.columns.tolist()
+    cols = cols[-1:] + cols[:-1]
+    df = df[cols]
 
-    #   # set column shot type as index
-    #   df = df.set_index('shot type')
+    # set column shot type as index
+    df = df.set_index('shot type')
 
-    #   # print coefficients
-    #   print(df)
-    #print()    
+    # print coefficients
+    print('Coefficients:')
+    print(df)
+
     # calculate confidence interval
+    confidence = bootstrap_confidence_interval(X, y, n=5, m=10)
+
+    for i in range(len(confidence)):
+        for j in range(len(confidence[0])):
+            confidence[i][j] = np.round(confidence[i][j], decimals=2)
+            confidence[i][j] = (confidence[i][j][0], confidence[i][j][1])
+
+    # change confidence interval to pandas dataframe, same as above
+    df2 = pd.DataFrame(confidence)
+
+    shots = ['above head (reference class)', 'layup',
+             'other', 'hook shot', 'dunk', 'tip-in']
+
+    df2['shot type'] = shots
+    df2 = df2.rename(columns={0: 'Competition',
+                            1: 'PlayerType',
+                            2: 'Transition',
+                            3: 'TwoLegged',
+                            4: 'Movement',
+                            5: 'Angle',
+                            6: 'Distance',
+                            7: 'Intercept'})
+
+    # Put shot type to the beginning
+    cols = df2.columns.tolist()
+    cols = cols[-1:] + cols[:-1]
+    df2 = df2[cols]
+    # set column shot type as index
+    df2 = df2.set_index('shot type')
+
+    # print confidence interval
+    print('Confidence interval:')
+    print(df2)
     
-    print('Calculating confidence interval...')
-    confidence = bootstrap_confidence_interval(X, y, n=200, m=50)
+    # generate data
+    X, y = multinomial_bad_ordinal_good(n_samples=MBOG_TRAIN+1000,
+                                        rand=random.Random(x=42))
+
+    # split data
+    X_train, X_test = X[:MBOG_TRAIN], X[MBOG_TRAIN:]
+    y_train, y_test = y[:MBOG_TRAIN], y[MBOG_TRAIN:]
+
+    # build models
+    model_ordinal = OrdinalLogReg().build(X_train, y_train)
+    model_multinomial = MultinomialLogReg().build(X_train, y_train)
+
+    # compare log-likelihoods
+    print('Log-likelihoods:')
+    print(f'    Multinomial: \t'
+          f'{model_multinomial.log_likelihood(X_test, y_test)}')
+    print(f'    Ordinal: \t \t'
+          f'{model_ordinal.log_likelihood(X_test, y_test)}')
 
