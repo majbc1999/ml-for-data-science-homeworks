@@ -90,7 +90,8 @@ class Polynomial:
             
         # Invalid input dimensions
         else:
-            raise ValueError(f"Invalid input dimensions: x.shape={x.shape}, y.shape={y.shape}")
+            raise ValueError(f"Invalid input dimensions:" 
+                             f"x.shape={x.shape}, y.shape={y.shape}")
         
         return kernel
 
@@ -106,14 +107,48 @@ class KernelizedRidgeRegression:
         self.kernel = kernel
         self.lambda_ = lambda_
 
-    
+    def fit(self, X: np.array, y: np.array) -> None:
+        """
+        Fit the model to the training data.
+        """
+        # Calculate the kernel matrix, K
+        K = self.kernel(X, X)
         
+        # Closed form solution
+        # w = (K + lambda * I)^-1 * y
 
+        # Calculate the inverse of the kernel matrix
+        K_inv = np.linalg.inv(K + self.lambda_ * np.eye(K.shape[0]))
+        
+        # Save x-es for prediction
+        self.X = X
 
+        # Precompute (K + lambda * I)^-1 * y
+        self.w = np.dot(K_inv, y)
 
+        return self
+    
+    def predict(self, X: np.array) -> np.array:
+        """
+        Predict the output for new data.
+        """
+        # Calculate k'(x) for each x in X
+        k_x = self.kernel(X, self.X)
+
+        # Calculate the predictions
+        y_pred = np.dot(k_x, self.w)
+
+        return y_pred
 
 
 class SVR:
     """
     Class for support vector regression.
     """
+
+
+
+
+
+if __name__ == "__main__":
+    pass
