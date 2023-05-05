@@ -158,7 +158,7 @@ class SVR:
         self.kernel = kernel
         self.C = 1 / lambda_
         self.epsilon = epsilon
-        self.tolerance = 1e-3 if tolerance is None else tolerance
+        self.tolerance = tolerance
         self.support_vectors = None
         self.alpha = None
         self.b = None
@@ -172,73 +172,127 @@ class SVR:
         K = self.kernel(X, X)
 
         # equation 10
-        # TODO: I think the bug is here 
-        P = matrix(np.outer(y, y) * K)
-        P = matrix(np.vstack((np.hstack((P, -P)), np.hstack((-P, P)))))
-        q = matrix(-1.0, (n_samples * 2, 1))
+        matrix_p = []
+        for i in range(n_samples):
+            aux = []
+            for j in range(n_samples):
+                aux.append(K[i, j])
+                aux.append(-K[i, j])
+            matrix_p.append(aux)
+            matrix_p.append([-x for x in aux])
+
+        vec_q = []
+        for i in range(n_samples):
+            vec_q.append(self.epsilon - y[i])
+            vec_q.append(self.epsilon + y[i])
+
+        P = matrix(np.array(matrix_p))
+        q = matrix(np.array(vec_q))
 
         # subject to 
-        A = matrix(np.concatenate((y, -y)).reshape((1, n_samples * 2)), (1, n_samples * 2))
-        b = matrix(0.0)
+        matrix_a = []
+        for i in range(n_samples):
+            matrix_a.append([1.0])
+            matrix_a.append([-1.0])
+
+        vec_b = np.array([0.0])
+        A = matrix(matrix_a)
+        print(A.size)
+        b = matrix(np.array(vec_b))
         
-        # bounds for alpha
-        G = matrix(np.vstack((-np.eye(n_samples * 2), np.eye(n_samples * 2))))
-        h = matrix(np.hstack((np.zeros(n_samples * 2), np.ones(n_samples * 2) * self.C)))
+        # bounds for alpha (has to be pos AND lower then C so size: 2 * n)
+        matrix_g = np.vstack((np.eye(n_samples * 2), 
+                              -np.eye(n_samples * 2)))
+        vec_h = np.hstack((np.ones(n_samples * 2) * self.C, 
+                           np.zeros(n_samples * 2)))
+        
+        G = matrix(matrix_g)
+        h = matrix(vec_h)
 
         # call solver
         solution = qp(P, q, G, h, A, b)
         
         # extract support vectors and bias
-        alpha = np.array(solution['x'])
-        calculated_ys = np.array(solution['y'])
+        alpha = np.array(solution['x']).flatten()
+        calculated_ys = np.array(solution['y']).flatten().flatten()
+        print(alpha)
 
-        # TODO: For some reason we should store both alpha_i and alpha_i* 
-        # even though we only ever use alpha_i - alpha_i* 
+        self.alpha = np.array([alpha[::2], alpha[1::2]]).T
 
-        # true_alpha_i = alpha_i - alpha_i*
-        true_alphas = []
-        aux_list = []
-        for alp in alpha:
-            if len(aux_list) != 2:
-                aux_list.append(alp)
-            else:
-                true_alphas.append(aux_list[0] - aux_list[1])
-                aux_list = []
-                aux_list.append(alp)
-        true_alphas.append(aux_list[0] - aux_list[1])
-
-        self.alpha = np.array(true_alphas)
         if not self.tolerance:
             self.support_vectors = X
-
-            # calculate b with calculated ys
             self.b = np.mean(y - calculated_ys)
         else:
-            self.support_vectors = X[self.alpha > self.tolerance]
-            self.alpha = alpha[self.alpha > self.tolerance]
-            self.b = np.mean(y - np.dot(K, self.alpha))
-    
+            indexes = []
+            for [a1, a1_] in self.alpha:
+                if abs(a1 - a1_) > self.tolerance:
+                    indexes.append(True)
+                else:
+                    indexes.append(False)
+
+            self.alpha = self.alpha[indexes]
+            self.support_vectors = X[indexes]
+            self.b = np.mean(y[indexes] - calculated_ys[indexes])
+
         return self
 
-    # TODO: Correct this
-    def predict(self, X):
+        #   # OLD CODE
+        #   # true_alpha_i = alpha_i - alpha_i*
+        #   true_alphas = []
+        #   aux_list = []
+        #   for alp in alpha:
+        #       if len(aux_list) != 2:
+        #           aux_list.append(alp)
+        #       else:
+        #           true_alphas.append(aux_list[0] - aux_list[1])
+        #           aux_list = []
+        #           aux_list.append(alp)
+        #   true_alphas.append(aux_list[0] - aux_list[1])
+        #   
+        #   self.alpha = np.array(true_alphas)
+        #   if not self.tolerance:
+        #       self.support_vectors = X
+        #   
+        #       # calculate b with calculated ys
+        #       self.b = np.mean(y - calculated_ys)
+        #   else:
+        #       self.support_vectors = X[self.alpha > self.tolerance]
+        #       self.alpha = alpha[self.alpha > self.tolerance]
+        #       self.b = np.mean(y - np.dot(K, self.alpha))
+
+    def predict(self, X: np.array) -> np.array:
         """
         Predict the output for new data.
         """
-        # Calculate k'(x) for each x in X
-        k_x = self.kernel(X, self.support_vectors)
+        alpha_diffs = self._alpha_difference()
 
-        # Calculate the predictions
-        y_pred = np.dot(k_x, self.alpha) + self.b
+        preds = []
+        for x in X:
+            k_x = self.kernel(x, self.support_vectors)
+            y_pred = np.dot(k_x, alpha_diffs) + self.b
+            preds.append(y_pred)
+        return np.array(preds)
 
-        return y_pred
-
-    def get_alpha(self):
+    def get_alpha(self) -> np.array:
         """
         Return the alpha values.
         """
         return self.alpha
 
+    def _alpha_difference(self) -> np.array:
+        """
+        Calculate the difference between alpha and alpha*.
+        """
+        alpha_diffs = []
+        for [a1, a1_] in self.alpha:
+            alpha_diffs.append(a1 - a1_)
+        return np.array(alpha_diffs)
+
+    def get_b(self) -> float:
+        """
+        Return the bias.
+        """
+        return self.b
 
 if __name__ == "__main__":
     pass
