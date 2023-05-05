@@ -1,4 +1,5 @@
 import numpy as np
+from cvxopt import matrix
 from cvxopt.solvers import qp
 from typing import Union
 
@@ -46,7 +47,8 @@ class RBF:
             
         # Invalid input dimensions
         else:
-            raise ValueError(f"Invalid input dimensions: x.shape={x.shape}, y.shape={y.shape}")
+            raise ValueError(f"Invalid input dimensions: x.shape={x.shape}," 
+                             f"y.shape={y.shape}")
         
         return kernel
 
@@ -63,7 +65,8 @@ class Polynomial:
 
     def __call__(self, x: np.array, y: np.array) -> float:
         """
-        Calculate the kernel function value for two floats, vectors, or matrices.
+        Calculate the kernel function value for two floats, vectors, 
+        or matrices.
         """
         
         # Check the dimensions of the input arrays
@@ -114,8 +117,7 @@ class KernelizedRidgeRegression:
         # Calculate the kernel matrix, K
         K = self.kernel(X, X)
         
-        # Closed form solution
-        # w = (K + lambda * I)^-1 * y
+        # Closed form solution: w = (K + lambda * I)^-1 * y
 
         # Calculate the inverse of the kernel matrix
         K_inv = np.linalg.inv(K + self.lambda_ * np.eye(K.shape[0]))
@@ -145,9 +147,97 @@ class SVR:
     """
     Class for support vector regression.
     """
+    def __init__(self, 
+                 kernel, 
+                 lambda_: float = 1.0, 
+                 epsilon: float = 0.1,
+                 tolerance: float = None) -> None:
+        """
+        Initialize the support vector regression model.
+        """
+        self.kernel = kernel
+        self.C = 1 / lambda_
+        self.epsilon = epsilon
+        self.tolerance = 1e-3 if tolerance is None else tolerance
+        self.support_vectors = None
+        self.alpha = None
+        self.b = None
 
+    def fit(self, X: np.array, y: np.array):
+        """
+        Fit the model to the training data.
+        """
+        # Gram matrix
+        n_samples, _ = X.shape
+        K = self.kernel(X, X)
 
+        # equation 10
+        # TODO: I think the bug is here 
+        P = matrix(np.outer(y, y) * K)
+        P = matrix(np.vstack((np.hstack((P, -P)), np.hstack((-P, P)))))
+        q = matrix(-1.0, (n_samples * 2, 1))
 
+        # subject to 
+        A = matrix(np.concatenate((y, -y)).reshape((1, n_samples * 2)), (1, n_samples * 2))
+        b = matrix(0.0)
+        
+        # bounds for alpha
+        G = matrix(np.vstack((-np.eye(n_samples * 2), np.eye(n_samples * 2))))
+        h = matrix(np.hstack((np.zeros(n_samples * 2), np.ones(n_samples * 2) * self.C)))
+
+        # call solver
+        solution = qp(P, q, G, h, A, b)
+        
+        # extract support vectors and bias
+        alpha = np.array(solution['x'])
+        calculated_ys = np.array(solution['y'])
+
+        # TODO: For some reason we should store both alpha_i and alpha_i* 
+        # even though we only ever use alpha_i - alpha_i* 
+
+        # true_alpha_i = alpha_i - alpha_i*
+        true_alphas = []
+        aux_list = []
+        for alp in alpha:
+            if len(aux_list) != 2:
+                aux_list.append(alp)
+            else:
+                true_alphas.append(aux_list[0] - aux_list[1])
+                aux_list = []
+                aux_list.append(alp)
+        true_alphas.append(aux_list[0] - aux_list[1])
+
+        self.alpha = np.array(true_alphas)
+        if not self.tolerance:
+            self.support_vectors = X
+
+            # calculate b with calculated ys
+            self.b = np.mean(y - calculated_ys)
+        else:
+            self.support_vectors = X[self.alpha > self.tolerance]
+            self.alpha = alpha[self.alpha > self.tolerance]
+            self.b = np.mean(y - np.dot(K, self.alpha))
+    
+        return self
+
+    # TODO: Correct this
+    def predict(self, X):
+        """
+        Predict the output for new data.
+        """
+        # Calculate k'(x) for each x in X
+        k_x = self.kernel(X, self.support_vectors)
+
+        # Calculate the predictions
+        y_pred = np.dot(k_x, self.alpha) + self.b
+
+        return y_pred
+
+    def get_alpha(self):
+        """
+        Return the alpha values.
+        """
+        return self.alpha
 
 
 if __name__ == "__main__":
