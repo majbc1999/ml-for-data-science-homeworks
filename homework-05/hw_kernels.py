@@ -1,6 +1,6 @@
 import numpy as np
+import cvxopt
 from cvxopt import matrix
-from cvxopt.solvers import qp
 from typing import Union
 
     
@@ -150,15 +150,13 @@ class SVR:
     def __init__(self, 
                  kernel, 
                  lambda_: float = 1.0, 
-                 epsilon: float = 0.1,
-                 tolerance: float = None) -> None:
+                 epsilon: float = 0.1) -> None:
         """
         Initialize the support vector regression model.
         """
         self.kernel = kernel
         self.C = 1 / lambda_
         self.epsilon = epsilon
-        self.tolerance = tolerance
         self.support_vectors = None
         self.alpha = None
         self.b = None
@@ -186,8 +184,8 @@ class SVR:
             vec_q.append(self.epsilon - y[i])
             vec_q.append(self.epsilon + y[i])
 
-        P = matrix(np.array(matrix_p))
-        q = matrix(np.array(vec_q))
+        P = matrix(matrix_p)
+        q = matrix(vec_q)
 
         # subject to 
         matrix_a = []
@@ -196,11 +194,11 @@ class SVR:
             matrix_a.append([-1.0])
 
         vec_b = np.array([0.0])
+
         A = matrix(matrix_a)
-        print(A.size)
-        b = matrix(np.array(vec_b))
+        b = matrix(vec_b)
         
-        # bounds for alpha (has to be pos AND lower then C so size: 2 * n)
+        # bounds for alpha (has to be positive & lower then C so size is 4 * n)
         matrix_g = np.vstack((np.eye(n_samples * 2), 
                               -np.eye(n_samples * 2)))
         vec_h = np.hstack((np.ones(n_samples * 2) * self.C, 
@@ -209,56 +207,21 @@ class SVR:
         G = matrix(matrix_g)
         h = matrix(vec_h)
 
-        # call solver
-        solution = qp(P, q, G, h, A, b)
+        # set solver to silent call solver
+        cvxopt.solvers.options['show_progress'] = False
+        solution = cvxopt.solvers.qp(P, q, G, h, A, b)
         
         # extract support vectors and bias
         alpha = np.array(solution['x']).flatten()
-        calculated_ys = np.array(solution['y']).flatten().flatten()
-        print(alpha)
-
+        calculated_ys = solution['y'][0]
+    
         self.alpha = np.array([alpha[::2], alpha[1::2]]).T
 
-        if not self.tolerance:
-            self.support_vectors = X
-            self.b = np.mean(y - calculated_ys)
-        else:
-            indexes = []
-            for [a1, a1_] in self.alpha:
-                if abs(a1 - a1_) > self.tolerance:
-                    indexes.append(True)
-                else:
-                    indexes.append(False)
-
-            self.alpha = self.alpha[indexes]
-            self.support_vectors = X[indexes]
-            self.b = np.mean(y[indexes] - calculated_ys[indexes])
+        self.support_vectors = X
+        
+        self.b = calculated_ys
 
         return self
-
-        #   # OLD CODE
-        #   # true_alpha_i = alpha_i - alpha_i*
-        #   true_alphas = []
-        #   aux_list = []
-        #   for alp in alpha:
-        #       if len(aux_list) != 2:
-        #           aux_list.append(alp)
-        #       else:
-        #           true_alphas.append(aux_list[0] - aux_list[1])
-        #           aux_list = []
-        #           aux_list.append(alp)
-        #   true_alphas.append(aux_list[0] - aux_list[1])
-        #   
-        #   self.alpha = np.array(true_alphas)
-        #   if not self.tolerance:
-        #       self.support_vectors = X
-        #   
-        #       # calculate b with calculated ys
-        #       self.b = np.mean(y - calculated_ys)
-        #   else:
-        #       self.support_vectors = X[self.alpha > self.tolerance]
-        #       self.alpha = alpha[self.alpha > self.tolerance]
-        #       self.b = np.mean(y - np.dot(K, self.alpha))
 
     def predict(self, X: np.array) -> np.array:
         """
