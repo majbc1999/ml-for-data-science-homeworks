@@ -1,7 +1,8 @@
 import numpy as np
 import cvxopt
 from cvxopt import matrix
-from typing import Union
+import pandas as pd
+import matplotlib.pyplot as plt
 
     
 class RBF:
@@ -57,11 +58,12 @@ class Polynomial:
     """
     Polynomial kernel
     """
-    def __init__(self, M: int = 2):
+    def __init__(self, M: int = 2, gamma: float = 1.0):
         """
         Initialize the kernel with a M value.
         """
         self.M = M
+        self.gamma = gamma
 
     def __call__(self, x: np.array, y: np.array) -> float:
         """
@@ -75,21 +77,21 @@ class Polynomial:
         
         # Two 1D vectors
         if x_dim == 1 and y_dim == 1:
-            kernel = (1 + np.dot(x, y)) ** self.M
+            kernel = (1 + self.gamma * np.dot(x, y)) ** self.M
             
         # 1D vector and 2D matrix
         elif x_dim == 1 and y_dim == 2:
-            kernel = (1 + np.dot(x, y.T)) ** self.M
+            kernel = (1 + self.gamma * np.dot(x, y.T)) ** self.M
             kernel = kernel.squeeze()  # Remove singleton dimension
             
         # 2D matrix and 1D vector
         elif x_dim == 2 and y_dim == 1:
-            kernel = (1 + np.dot(x, y)) ** self.M
+            kernel = (1 + self.gamma * np.dot(x, y)) ** self.M
             kernel = kernel.squeeze()  # Remove singleton dimension
             
         # Two 2D matrices
         elif x_dim == 2 and y_dim == 2:
-            kernel = (1 + np.dot(x, y.T)) ** self.M
+            kernel = (1 + self.gamma * np.dot(x, y.T)) ** self.M
             
         # Invalid input dimensions
         else:
@@ -109,6 +111,7 @@ class KernelizedRidgeRegression:
         """
         self.kernel = kernel
         self.lambda_ = lambda_
+        self.X = None
 
     def fit(self, X: np.array, y: np.array) -> None:
         """
@@ -134,6 +137,8 @@ class KernelizedRidgeRegression:
         """
         Predict the output for new data.
         """
+        if self.X is None:
+            raise ValueError("The model has not been fitted yet.")
         # Calculate k'(x) for each x in X
         k_x = self.kernel(X, self.X)
 
@@ -257,5 +262,463 @@ class SVR:
         """
         return self.b
 
+    def produce_sparse_solution(self, tolerance: float):
+        """
+        Filter out the support vectors with alpha < tolerance.
+        """
+        support_vectors = []
+        counter = 0
+        
+        new_alphas = []
+        for i, [a1, a1_] in enumerate(self.alpha):
+            if abs(a1 - a1_) > tolerance:
+                support_vectors.append(self.support_vectors[i])
+                new_alphas.append([a1, a1_])
+            else:
+                counter += 1
+        print(f"Filtered out {counter} support vectors.")
+        
+        self.support_vectors = np.array(support_vectors)
+        self.alpha = np.array(new_alphas)
+
+        return self
+
+    def get_support_vectors(self) -> np.array:
+        """
+        Return the support vectors.
+        """
+        return self.support_vectors
+
+
+# helper functions
+def calculate_mse(X_true: np.array, y_true: np.array, model) -> float:
+    """
+    Calculate the mean squared error.
+    """
+    y_pred = model.predict(X_true)
+    return np.mean((y_true - y_pred) ** 2)
+
+def sine_dataset_parameter_discovery(train, test):
+    # Ia: kernelized ridge regression
+
+    # 1. polynomial kernel (lambda doesn't matter as much as M)
+    vals = []
+    for M in range(1, 20):
+        kernel = Polynomial(M)
+        for lambda_ in [0.0001, 0.001, 0.01, 0.1, 1.0, 10]:
+            model = KernelizedRidgeRegression(kernel, lambda_=lambda_)
+            model.fit(train["x"].values.reshape(-1, 1), train["y"].values)
+            mse = calculate_mse(test['x'].values.reshape(-1, 1), test['y'].values, model)
+            vals.append([lambda_, M, mse])
+    
+    vals = np.array(vals)
+    # normalize mse
+    vals[:, 2] = np.log(vals[:, 2])
+
+    plt.figure(figsize=(4, 4))
+    plt.scatter(vals[:, 0], vals[:, 1], c=vals[:, 2], cmap='RdYlGn')
+    plt.title('Kernelized Ridge Regression \n kernel = polynomial')
+    plt.xscale('log')
+    plt.xlabel('lambda')
+    plt.ylabel('M')
+    plt.savefig('homework-05/plots/ridge_poly.png', bbox_inches='tight')
+    plt.show()
+
+    # 2. RBF kernel
+    vals = []
+    for sigma in [0.001, 0.01, 0.1, 1.0, 10, 100, 1000, 10000]:
+        kernel = RBF(sigma=sigma)
+        for lambda_ in [0.0001, 0.001, 0.01, 0.1, 1.0, 10]:
+            model = KernelizedRidgeRegression(kernel, lambda_=lambda_)
+            model.fit(train["x"].values.reshape(-1, 1), train["y"].values)
+            mse = calculate_mse(test['x'].values.reshape(-1, 1), test['y'].values, model)
+            vals.append([lambda_, sigma, mse])
+    
+    vals = np.array(vals)
+    # normalize mse
+    vals[:, 2] = np.log(vals[:, 2])
+
+    plt.figure(figsize=(4, 4))
+    plt.scatter(vals[:, 0], vals[:, 1], c=vals[:, 2], cmap='RdYlGn')
+    plt.title('Kernelized Ridge Regression \n kernel = RBF')
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.xlabel('lambda')
+    plt.ylabel('sigma')
+    plt.savefig('homework-05/plots/ridge_rbf.png', bbox_inches='tight')
+    plt.show()
+
+    # Ib: support vector regression
+    # 1. polynomial kernel
+    vals = []
+    for M in range(1,5):
+        kernel = Polynomial(M=M)
+        for epsilon in [0.0001, 0.001, 0.01, 0.1, 1.0]:
+            model = SVR(kernel, lambda_=0.01, epsilon=epsilon)
+            model.fit(train["x"].values.reshape(-1, 1), train["y"].values)
+            mse = calculate_mse(test['x'].values.reshape(-1, 1), test['y'].values, model)
+            vals.append([epsilon, M, mse])
+    
+    vals = np.array(vals)
+    # normalize mse
+    vals[:, 2] = np.log(vals[:, 2])
+
+    plt.figure(figsize=(4, 4))
+    plt.scatter(vals[:, 0], vals[:, 1], c=vals[:, 2], cmap='RdYlGn')
+    plt.title('Support Vector Regression \n kernel = Polynomial')
+    plt.xscale('log')
+    plt.xlabel('epsilon')
+    plt.ylabel('M')
+    plt.savefig('homework-05/plots/svr_poly.png', bbox_inches='tight')
+    plt.show()
+
+    # 2. RBF kernel
+    vals = []
+    for sigma in [0.001, 0.01, 0.1, 1.0, 10, 100, 1000, 10000]:
+        kernel = RBF(sigma=sigma)
+        for epsilon in [0.0001, 0.001, 0.01, 0.1, 1.0]:
+            model = SVR(kernel, lambda_=0.01, epsilon=epsilon)
+            model.fit(train["x"].values.reshape(-1, 1), train["y"].values)
+            mse = calculate_mse(test['x'].values.reshape(-1, 1), test['y'].values, model)
+            vals.append([epsilon, sigma, mse])
+    
+    vals = np.array(vals)
+    # normalize mse
+    vals[:, 2] = np.log(vals[:, 2])
+
+    plt.figure(figsize=(4, 4))
+    plt.scatter(vals[:, 0], vals[:, 1], c=vals[:, 2], cmap='RdYlGn')
+    plt.title('Support Vector Regression \n kernel = RBF')
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.xlabel('epsilon')
+    plt.ylabel('sigma')
+    plt.savefig('homework-05/plots/svr_rbf.png', bbox_inches='tight')
+    plt.show()
+
+def sine_dataset_RBF_drawing(train, test):
+ # select good parameters for SVR
+    kernel1 = RBF(sigma=0.0001)
+    model1 = SVR(kernel1, lambda_=0.001, epsilon=0.01)	
+
+    # fit the model
+    model1.fit(train["x"].values.reshape(-1, 1), train["y"].values)
+    
+    # filter out the support vectors, that are low in magnitude
+    model1 = model1.produce_sparse_solution(tolerance = 1e-5)
+    support_vectors = model1.get_support_vectors()
+
+    # add also support vectors y-s
+    support_vectors_y = []
+    for i in range(len(support_vectors)):
+        # find index of support vector in train dataset
+        idx = np.where(train["x"].values == support_vectors[i])[0][0]
+        support_vectors_y.append(train["y"].values[idx])
+    support_vectors_y = np.array(support_vectors_y)
+
+    model1.predict(test["x"].values.reshape(-1, 1))
+    
+    # plot the input data, the fit, and mark support vectors on the plot.
+    plt.figure(figsize=(4, 4))
+    plt.title('Support Vector Regression \n kernel = RBF \n sine data')
+    plt.scatter(test["x"], model1.predict(test["x"].values.reshape(-1, 1)), label="fit")
+    plt.scatter(test["x"], test["y"], label="data")
+    plt.scatter(support_vectors, support_vectors_y, label="support vectors")
+    plt.legend()
+    plt.savefig('homework-05/plots/svr_rbf_fit.png', bbox_inches='tight')
+    plt.show()
+
+    kernel2 = Polynomial(M=6)
+    model2 = SVR(kernel2, lambda_=0.00001, epsilon=0.0001)
+
+    # fit the model
+    model2.fit(train["x"].values.reshape(-1, 1), train["y"].values)
+
+    # filter out the support vectors, that are low in magnitude
+    model2 = model2.produce_sparse_solution(tolerance = 1e-2)
+
+    support_vectors = model2.get_support_vectors()
+
+    # add also support vectors y-s (from train dataset)
+    support_vectors_y = []
+    for i in range(len(support_vectors)):
+        # find index of support vector in train dataset
+        idx = np.where(train["x"].values == support_vectors[i])[0][0]
+        support_vectors_y.append(train["y"].values[idx])
+    support_vectors_y = np.array(support_vectors_y)
+
+    preds = model2.predict(test["x"].values.reshape(-1, 1))
+
+    # plot
+
+    plt.figure(figsize=(4, 4))
+    plt.title('Support Vector Regression \n kernel = Polynomial \n sine data')
+    plt.scatter(test["x"], preds, label="fit")
+    plt.scatter(test["x"], test["y"], label="data")
+    plt.scatter(support_vectors, support_vectors_y, label="support vectors")
+    plt.legend()
+    plt.savefig('homework-05/plots/svr_poly_fit.png', bbox_inches='tight')
+    plt.show()
+
+def cross_validate_mse(kernel, model, X, y, lambda_, k=5):
+    if model == "SVR":
+        # 1st k-fold
+        model = SVR(kernel=kernel, lambda_=lambda_)
+        crs = len(X) // k
+        X_train = X[crs:]
+        y_train = y[crs:]
+        X_test = X[:crs]
+        y_test = y[:crs]
+        model.fit(X_train, y_train)
+
+        mses = []
+        mses.append(calculate_mse(X_test, y_test, model))
+
+        for i in range(k - 2):
+            X_train = np.concatenate((X[:crs * i], X[crs * (i + 1):]))
+            y_train = np.concatenate((y[:crs * i], y[crs * (i + 1):]))
+            X_test = X[crs * i:crs * (i + 1)]
+            y_test = y[crs * i:crs * (i + 1)]
+            model = SVR(kernel=kernel, lambda_=lambda_)
+            model.fit(X_train, y_train)
+            mses.append(calculate_mse(X_test, y_test, model))
+
+        # last k-fold
+        X_train = X[:crs * (k - 1)]
+        y_train = y[:crs * (k - 1)]
+        X_test = X[crs * (k - 1):]
+        y_test = y[crs * (k - 1):]
+        model = SVR(kernel=kernel, lambda_=lambda_)
+        model.fit(X_train, y_train)
+        mses.append(calculate_mse(X_test, y_test, model))
+
+        return np.mean(mses)
+
+    else:
+        # 1st k-fold
+        model = KernelizedRidgeRegression(kernel=kernel, lambda_=lambda_)
+        crs = len(X) // k
+        X_train = X[crs:]
+        y_train = y[crs:]
+        X_test = X[:crs]
+        y_test = y[:crs]
+        model.fit(X_train, y_train)
+
+        mses = []
+        mses.append(calculate_mse(X_test, y_test, model))
+
+        for i in range(k - 2):
+            X_train = np.concatenate((X[:crs * i], X[crs * (i + 1):]))
+            y_train = np.concatenate((y[:crs * i], y[crs * (i + 1):]))
+            X_test = X[crs * i:crs * (i + 1)]
+            y_test = y[crs * i:crs * (i + 1)]
+            model = KernelizedRidgeRegression(kernel=kernel, lambda_=lambda_)
+            model.fit(X_train, y_train)
+            mses.append(calculate_mse(X_test, y_test, model))
+
+        # last k-fold
+        X_train = X[:crs * (k - 1)]
+        y_train = y[:crs * (k - 1)]
+        X_test = X[crs * (k - 1):]
+        y_test = y[crs * (k - 1):]
+        model = KernelizedRidgeRegression(kernel=kernel, lambda_=lambda_)
+        model.fit(X_train, y_train)
+        mses.append(calculate_mse(X_test, y_test, model))
+
+        return np.mean(mses)
+
+def optimal_lambda(kernel, model, X, y, k=5):
+    lambdas1 = np.linspace(0.001, 1, 20)
+    lambdas2 = np.linspace(1, 100, 20)
+    lambdas = np.concatenate((lambdas1, lambdas2))
+    mses = []
+    for lambda_ in lambdas:
+        mses.append(cross_validate_mse(kernel, model, X, y, lambda_, k=k))
+    return lambdas[np.argmin(mses)]
+
+def krr_and_polynomial_housing(test_X, test_y, train_X, train_y):
+
+    mses = []
+
+    for m in range(1, 11):
+        
+        model = KernelizedRidgeRegression(kernel=Polynomial(m), 
+                                          lambda_=1)
+        model = model.fit(train_X, train_y)
+        mse = calculate_mse(test_X, test_y, model)
+        
+        opt_lambda = optimal_lambda(Polynomial(m), "KRR", train_X, train_y)
+        model2 = KernelizedRidgeRegression(kernel=Polynomial(m),
+                                           lambda_=opt_lambda)
+        model2 = model2.fit(train_X, train_y)
+        mse2 = calculate_mse(test_X, test_y, model2)
+
+        mses.append([m, mse, mse2])
+
+    mses = np.array(mses)
+    print(mses)
+
+    # plot
+    plt.figure()
+    plt.plot(mses[:, 0], mses[:, 1], label="lambda = 1", color="red")
+    plt.plot(mses[:, 0], mses[:, 2], label="lambda = optimal", color="blue")
+    plt.xlabel("M")
+    plt.ylabel("MSE")
+    plt.title("MSE for M = 1, 2, ..., 10 for polynomial kernel \n (Kernelized Ridge Regression)")
+    plt.legend()
+    plt.savefig("homework-05/plots/mse_comparison1.png")
+    plt.show()
+
+def svr_and_polynomial_housing(test_X, test_y, train_X, train_y):
+    mses = []
+
+    for m in range(1, 11):
+        
+        model = SVR(kernel=Polynomial(m), 
+                           lambda_=1)
+        model = model.fit(train_X, train_y)
+        mse = calculate_mse(test_X, test_y, model)
+        
+        opt_lambda = optimal_lambda(Polynomial(m, 1.4), "SVR", train_X, train_y)
+        print(opt_lambda)
+        model2 = SVR(kernel=Polynomial(m),
+                     lambda_=opt_lambda)
+        model2 = model2.fit(train_X, train_y)
+        mse2 = calculate_mse(test_X, test_y, model2)
+
+        mses.append([m, mse, mse2])
+
+    mses = np.array(mses)
+    print(mses)
+
+    # plot
+    plt.figure()
+    plt.plot(mses[:, 0], mses[:, 1], label="lambda = 1", color="red")
+    plt.plot(mses[:, 0], mses[:, 2], label="lambda = optimal", color="blue")
+    plt.xlabel("M")
+    plt.ylabel("MSE")
+    plt.title("MSE for M = 1, 2, ..., 10 for polynomial kernel \n (SVR)")
+    plt.legend()
+    plt.savefig("homework-05/plots/mse_comparison2.png")
+    plt.show()
+
+def krr_and_rbf_housing(test_X, test_y, train_X, train_y):
+    mses = []
+
+    for sigma in [0.001, 0.01, 0.1, 1, 10, 100, 1000]:
+        
+        model = KernelizedRidgeRegression(kernel=RBF(sigma), 
+                           lambda_=1)
+        model = model.fit(train_X, train_y)
+        mse = calculate_mse(test_X, test_y, model)
+        
+        opt_lambda = optimal_lambda(RBF(sigma), "SVR", train_X, train_y)
+        print(opt_lambda)
+        model2 = KernelizedRidgeRegression(kernel=RBF(sigma),
+                     lambda_=opt_lambda)
+        model2 = model2.fit(train_X, train_y)
+        mse2 = calculate_mse(test_X, test_y, model2)
+
+        mses.append([sigma, mse, mse2])
+
+    mses = np.array(mses)
+    print(mses)
+
+    # plot
+    plt.figure()
+    plt.plot(mses[:, 0], mses[:, 1], label="lambda = 1", color="red")
+    plt.plot(mses[:, 0], mses[:, 2], label="lambda = optimal", color="blue")
+    plt.xlabel("M")
+    plt.ylabel("MSE")
+    plt.title("MSE for sigma = 0.001, ..., 1000 for rbf kernel \n (Kernelized Ridge Regression)")
+    plt.legend() 
+    plt.savefig("homework-05/plots/mse_comparison3.png")
+    plt.show()
+
+def svr_and_rbf_housing(test_X, test_y, train_X, train_y):
+    mses = []
+
+    for sigma in [0.001, 0.01, 0.1, 1, 10, 100, 1000]:
+        
+        model = SVR(kernel=RBF(sigma), 
+                    lambda_=1)
+        model = model.fit(train_X, train_y)
+        mse = calculate_mse(test_X, test_y, model)
+        
+        opt_lambda = optimal_lambda(RBF(sigma), "SVR", train_X, train_y)
+        print(opt_lambda)
+        model2 = SVR(kernel=RBF(sigma),
+                     lambda_=opt_lambda)
+        model2 = model2.fit(train_X, train_y)
+        mse2 = calculate_mse(test_X, test_y, model2)
+
+        mses.append([sigma, mse, mse2])
+
+    mses = np.array(mses)
+    print(mses)
+
+    # plot
+    plt.figure()
+    plt.plot(mses[:, 0], mses[:, 1], label="lambda = 1", color="red")
+    plt.plot(mses[:, 0], mses[:, 2], label="lambda = optimal", color="blue")
+    plt.xlabel("M")
+    plt.ylabel("MSE")
+    plt.title("MSE for sigma = 0.001, ..., 1000 for rbf kernel \n (SVR)")
+    plt.legend()
+    plt.savefig("homework-05/plots/mse_comparison4.png")
+    plt.show()
+
+
 if __name__ == "__main__":
-    pass
+    # -------------------------------------------------------------------------
+    # I: sine dataset part
+
+    # load the data
+    df = pd.read_csv("homework-05/sine.csv")
+    
+    # randomly select 80% of the data for training
+    train = df.sample(frac=0.8, random_state=1)
+    # the other 20% is for testing
+    test = df.drop(train.index)
+    
+    # split the data into X and y
+    X = df.drop('y', axis=1).to_numpy()
+    y = df['y'].to_numpy()
+
+    kernel1 = Polynomial(6, 0.01)
+    kernel2 = RBF(0.1)
+
+    model1 = SVR(kernel=kernel1, lambda_=0.1, epsilon=0.1)
+    model1 = model1.fit(X, y)
+    model1 = model1.produce_sparse_solution(tolerance=1e-2)
+
+    print(len(model1.get_support_vectors()))
+
+#    # -------------------------------------------------------------------------
+#    # II. housing dataset part
+#    # load the data
+#    df = pd.read_csv("homework-05/housing2r.csv")
+#
+#    y = df["y"]
+#    X = df.drop("y", axis=1)
+#
+#    # first 80% of the data for training
+#    n_rows = int(df.shape[0] * 0.8)
+#
+#    # Select the first 80% of rows using iloc
+#    train_y = y.iloc[:n_rows].to_numpy()
+#    train_X = X.iloc[:n_rows, :].to_numpy()
+#    # Select the remaining 20% of rows using iloc
+#    test_y = y.iloc[n_rows:].to_numpy()
+#    test_X = X.iloc[n_rows:, :].to_numpy()
+#
+#    
+#    # this one works, all though it is funny how predictions are worse for
+#    # higher values of M
+#    krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+#
+#    svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+#
+#    krr_and_rbf_housing(test_X, test_y, train_X, train_y)
+#
+#    svr_and_rbf_housing(test_X, test_y, train_X, train_y)
