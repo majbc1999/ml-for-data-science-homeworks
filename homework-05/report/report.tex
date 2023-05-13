@@ -1,0 +1,99 @@
+\documentclass{article}
+\usepackage[a4paper,margin=2.5cm]{geometry} % set A4 paper size and 2.5cm margins
+\usepackage{amsmath}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{hyperref}
+\usepackage[backend=biber]{biblatex}
+\addbibresource{bibliography.bib}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,      
+    urlcolor=blue,
+    citecolor=black,
+    pdftitle={Overleaf Example},
+    pdfpagemode=FullScreen,
+    }
+
+\title{Machine Learning For Data Science I, \\[0.1cm] Homework 05}
+
+\author{Maj Gaberšček, 27212075}
+\date{May 2023}
+
+\begin{document}
+
+\maketitle
+
+\section{Problem}
+
+The problem of this homework was to implement two kernel classes (the polynomial kernel and the RBF kernel) and two regression methods (kernelized ridge regression and support vector regression). 
+
+\section{Implementation}
+
+\subsection{RBF kernel}
+This implementation was nothing really special. We set the sigma parameter, when initializing the object. When calling it, we check for \texttt{x} and \texttt{y} dimension and return kernel values.
+
+\subsection{Polynomial kernel}
+Again, we set the dimension to the polynomial kernel, when initializing it. Later, when calling it, we firstly check the dimension of the inputs and return correct kernel values.
+
+I also had to add the $\gamma$ parameter for scaling. Otherwise, polynomial kernels could not be combined with SVR (because of some trouble with \texttt{cvxopt.solvers.qp} optimization).
+
+\subsection{Kernelized ridge regression}
+When fitting the kernelized ridge regression, we first calculate the kernel matrix, \texttt{K}. Regarding the closed form solution we sets weights to: $$w = (K + \lambda I)^{-1} y$$. When predicting, we calculate $k'x = kernel(X_{train}, X_{predict})$ and dot multiply it with weight matrix.
+
+\subsection{Support vector regression}
+When fitting the SVR, the main goal is to understand, that we must convert problem in Equation 10 of \cite{smola2004tutorial} to the QP problem, where we are minimizing $\frac{1}{2} x^T P x + q^T x$, subject to $G x <= h$ and $A x = b$. Most challenging was finding a matrix $P$, as instructions stated, that $x$ had to be of form $x = [\alpha_1, \alpha_1^*,..., \alpha_n, \alpha_n^*]$. So after some thoughts, we found out, that: $P = p_{ij}$, where $p_{ij}$ is a block of size 2x2: 
+
+\[
+p_{ij} = \begin{bmatrix}
+\langle x_i, x_j \rangle & -\langle x_i, x_j \rangle \\
+-\langle x_i, x_j \rangle & \langle x_i, x_j \rangle
+\end{bmatrix}
+\]
+
+Other matrices were not that hard to find. After parameter optimization with the help of \texttt{cvxopt.solvers.qp} function, we set alphas and support vectors to the model.
+
+\section{The sine dataset}
+
+Here, the main goal was to find some parameters, for which the method/kernel would perform relatively good. I plotted performance of models (in regard to MSE on training set). I did not include the plots in the report, but they can be found in plots folder on my \href{https://github.com/majbc1999/ml-for-data-science-homeworks} {Github repository}. Of course green color means better performance and red color worse.
+
+So by finding some good parameters, I applied models to the sine dataset, marked the fit, the data and (if the model is SVR) the support vectors (Figures \ref{fig:sine_KRR_polynomial}, \ref{fig:sine_KRR_RBF}, \ref{fig:sine_SVR_polynomial}, \ref{fig:sine_SVR_RBF}).
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{homework-05/plot/sine_KRR_polynomial.png}
+    \caption{The fit and data for kernelized ridge regression with polynomial kernel}
+    \label{fig:sine_KRR_polynomial}
+\end{figure}
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{homework-05/plot/sine_KRR_RBF.png}
+    \caption{The fit and data for kernelized ridge regression with RBF kernel}
+    \label{fig:sine_KRR_RBF}
+\end{figure}
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{homework-05/plot/sine_SVR_polynomial.png}
+    \caption{The fit and data for SVR with polynomial kernel}
+    \label{fig:sine_SVR_polynomial}
+\end{figure}
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{homework-05/plot/sine_SVR_RBF.png}
+    \caption{The fit and data for SVR with RBF kernel}
+    \label{fig:sine_SVR_RBF}
+\end{figure}
+
+
+
+\section{The housing dataset}
+
+\section{Conclusions}
+
+
+\printbibliography
+
+\end{document}
