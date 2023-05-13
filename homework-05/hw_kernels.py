@@ -187,8 +187,8 @@ class SVR:
 
         vec_q = []
         for i in range(n_samples):
-            vec_q.append(self.epsilon - y[i])
-            vec_q.append(self.epsilon + y[i])
+            vec_q.append(float(self.epsilon - y[i]))
+            vec_q.append(float(self.epsilon + y[i]))
 
         P = matrix(matrix_p)
         q = matrix(vec_q)
@@ -474,6 +474,13 @@ def optimal_lambda(kernel, model, X, y, k=5):
         mses.append(cross_validate_mse(kernel, model, X, y, lambda_, k=k))
     return lambdas[np.argmin(mses)]
 
+def normalize(X: np.array) -> np.array:
+    """
+    Normalize the dataset
+    """
+    X = (X - np.mean(X)) / np.std(X)
+    return X
+
 # script functions
 
 def sine_SVR_polynomial(X, y):
@@ -603,13 +610,14 @@ def krr_and_polynomial_housing(test_X, test_y, train_X, train_y):
 
     for m in range(1, 11):
         
-        model = KernelizedRidgeRegression(kernel=Polynomial(m, 0.05), 
+        model = KernelizedRidgeRegression(kernel=Polynomial(m, 0.01), 
                                           lambda_=1)
         model = model.fit(train_X, train_y)
         mse = calculate_mse(test_X, test_y, model)
         
-        opt_lambda = optimal_lambda(Polynomial(m, 0.05), "KRR", train_X, train_y)
-        model2 = KernelizedRidgeRegression(kernel=Polynomial(m, 0.05),
+        opt_lambda = optimal_lambda(Polynomial(m, 0.01), "KRR", train_X, train_y)
+
+        model2 = KernelizedRidgeRegression(kernel=Polynomial(m, 0.01),
                                            lambda_=opt_lambda)
         model2 = model2.fit(train_X, train_y)
         mse2 = calculate_mse(test_X, test_y, model2)
@@ -617,7 +625,6 @@ def krr_and_polynomial_housing(test_X, test_y, train_X, train_y):
         mses.append([m, mse, mse2])
 
     mses = np.array(mses)
-    print(mses)
 
     # plot
     plt.figure()
@@ -635,18 +642,18 @@ def svr_and_polynomial_housing(test_X, test_y, train_X, train_y):
 
     for m in range(1, 11):
         
-        model = SVR(kernel=Polynomial(m), 
+        model = SVR(kernel=Polynomial(m, 0.00001), 
                            lambda_=1)
         model = model.fit(train_X, train_y)
         mse = calculate_mse(test_X, test_y, model)
         
-        opt_lambda = optimal_lambda(Polynomial(m, 1.4), "SVR", train_X, train_y)
-        print(opt_lambda)
-        model2 = SVR(kernel=Polynomial(m),
+        opt_lambda = optimal_lambda(Polynomial(m, 0.00001), "SVR", train_X, train_y)
+        
+        model2 = SVR(kernel=Polynomial(m, 0.00001),
                      lambda_=opt_lambda)
         model2 = model2.fit(train_X, train_y)
         mse2 = calculate_mse(test_X, test_y, model2)
-
+        print(f'Works for m = {m}')
         mses.append([m, mse, mse2])
 
     mses = np.array(mses)
@@ -689,7 +696,8 @@ def krr_and_rbf_housing(test_X, test_y, train_X, train_y):
     plt.figure()
     plt.plot(mses[:, 0], mses[:, 1], label="lambda = 1", color="red")
     plt.plot(mses[:, 0], mses[:, 2], label="lambda = optimal", color="blue")
-    plt.xlabel("M")
+    plt.xlabel("sigma")
+    plt.xscale("log")
     plt.ylabel("MSE")
     plt.title("MSE for sigma = 0.001, ..., 1000 for rbf kernel \n (Kernelized Ridge Regression)")
     plt.legend() 
@@ -769,12 +777,13 @@ if __name__ == "__main__":
     # select the remaining 20% of rows using iloc
     test_y = y.iloc[n_rows:].to_numpy()
     test_X = X.iloc[n_rows:, :].to_numpy()
-
+    
     # perform the experiments
+    
     krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
-      
+
     # svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
-    # 
+     
     # krr_and_rbf_housing(test_X, test_y, train_X, train_y)
-    # 
+    
     # svr_and_rbf_housing(test_X, test_y, train_X, train_y)
