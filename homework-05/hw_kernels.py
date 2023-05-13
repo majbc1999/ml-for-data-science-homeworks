@@ -4,7 +4,8 @@ from cvxopt import matrix
 import pandas as pd
 import matplotlib.pyplot as plt
 
-    
+# models
+
 class RBF:
     """
     Radial basis function kernel
@@ -291,6 +292,7 @@ class SVR:
 
 
 # helper functions
+
 def calculate_mse(X_true: np.array, y_true: np.array, model) -> float:
     """
     Calculate the mean squared error.
@@ -396,70 +398,6 @@ def sine_dataset_parameter_discovery(train, test):
     plt.savefig('homework-05/plots/svr_rbf.png', bbox_inches='tight')
     plt.show()
 
-def sine_dataset_RBF_drawing(train, test):
- # select good parameters for SVR
-    kernel1 = RBF(sigma=0.0001)
-    model1 = SVR(kernel1, lambda_=0.001, epsilon=0.01)	
-
-    # fit the model
-    model1.fit(train["x"].values.reshape(-1, 1), train["y"].values)
-    
-    # filter out the support vectors, that are low in magnitude
-    model1 = model1.produce_sparse_solution(tolerance = 1e-5)
-    support_vectors = model1.get_support_vectors()
-
-    # add also support vectors y-s
-    support_vectors_y = []
-    for i in range(len(support_vectors)):
-        # find index of support vector in train dataset
-        idx = np.where(train["x"].values == support_vectors[i])[0][0]
-        support_vectors_y.append(train["y"].values[idx])
-    support_vectors_y = np.array(support_vectors_y)
-
-    model1.predict(test["x"].values.reshape(-1, 1))
-    
-    # plot the input data, the fit, and mark support vectors on the plot.
-    plt.figure(figsize=(4, 4))
-    plt.title('Support Vector Regression \n kernel = RBF \n sine data')
-    plt.scatter(test["x"], model1.predict(test["x"].values.reshape(-1, 1)), label="fit")
-    plt.scatter(test["x"], test["y"], label="data")
-    plt.scatter(support_vectors, support_vectors_y, label="support vectors")
-    plt.legend()
-    plt.savefig('homework-05/plots/svr_rbf_fit.png', bbox_inches='tight')
-    plt.show()
-
-    kernel2 = Polynomial(M=6)
-    model2 = SVR(kernel2, lambda_=0.00001, epsilon=0.0001)
-
-    # fit the model
-    model2.fit(train["x"].values.reshape(-1, 1), train["y"].values)
-
-    # filter out the support vectors, that are low in magnitude
-    model2 = model2.produce_sparse_solution(tolerance = 1e-2)
-
-    support_vectors = model2.get_support_vectors()
-
-    # add also support vectors y-s (from train dataset)
-    support_vectors_y = []
-    for i in range(len(support_vectors)):
-        # find index of support vector in train dataset
-        idx = np.where(train["x"].values == support_vectors[i])[0][0]
-        support_vectors_y.append(train["y"].values[idx])
-    support_vectors_y = np.array(support_vectors_y)
-
-    preds = model2.predict(test["x"].values.reshape(-1, 1))
-
-    # plot
-
-    plt.figure(figsize=(4, 4))
-    plt.title('Support Vector Regression \n kernel = Polynomial \n sine data')
-    plt.scatter(test["x"], preds, label="fit")
-    plt.scatter(test["x"], test["y"], label="data")
-    plt.scatter(support_vectors, support_vectors_y, label="support vectors")
-    plt.legend()
-    plt.savefig('homework-05/plots/svr_poly_fit.png', bbox_inches='tight')
-    plt.show()
-
 def cross_validate_mse(kernel, model, X, y, lambda_, k=5):
     if model == "SVR":
         # 1st k-fold
@@ -536,19 +474,142 @@ def optimal_lambda(kernel, model, X, y, k=5):
         mses.append(cross_validate_mse(kernel, model, X, y, lambda_, k=k))
     return lambdas[np.argmin(mses)]
 
+# script functions
+
+def sine_SVR_polynomial(X, y):
+    """
+    Sine dataset with polynomial kernel and SVR
+    """
+    kernel1 = Polynomial(9, 0.05)
+    model1 = SVR(kernel=kernel1, lambda_=0.1, epsilon=1.2)
+    model1 = model1.fit(X, y)
+    model1 = model1.produce_sparse_solution(tolerance=1e-3)
+
+    support_vectors = model1.support_vectors
+    print(f'Length of support vectors: {len(support_vectors)}')
+
+    support_ys = []
+    for vector in support_vectors:
+        # find corresponding y value
+        index = np.where((X == vector).all(axis=1))[0][0]
+        support_ys.append(y[index])
+
+    fit_X = np.linspace(0, 20, 1000)
+    fit_X = fit_X.reshape(-1, 1)
+
+    fit_y = model1.predict(fit_X)
+    fit_X = fit_X.flatten()
+
+    # plot the input data, the fit, and mark support vectors on the plot
+    plt.figure()
+    plt.scatter(X.flatten(), y, color="tab:orange", label="data")
+    plt.plot(fit_X, fit_y, color="tab:blue", label="fit")
+    plt.scatter(support_vectors, support_ys, color="tab:red", label="support vectors", edgecolors="black")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("SVR with polynomial kernel (M = 9, lambda = 0.1, epsilon = 1.2)")
+    plt.legend()
+    plt.savefig("homework-05/plots/sine_SVR_polynomial.png")
+
+def sine_SVR_RBF(X, y):
+    """
+    Sine dataset with RBF kernel and SVR
+    """
+    kernel2 = RBF(1.8)
+
+    model1 = SVR(kernel=kernel2, lambda_=0.1, epsilon=1)
+    model1 = model1.fit(X, y)
+    model1 = model1.produce_sparse_solution(tolerance=1e-3)
+
+    support_vectors = model1.support_vectors
+    print(f'Length of support vectors: {len(support_vectors)}')
+
+    support_ys = []
+    for vector in support_vectors:
+        # find corresponding y value
+        index = np.where((X == vector).all(axis=1))[0][0]
+        support_ys.append(y[index])
+
+    fit_X = np.linspace(0, 20, 1000)
+    fit_X = fit_X.reshape(-1, 1)
+
+    fit_y = model1.predict(fit_X)
+    fit_X = fit_X.flatten()
+
+    # plot the input data, the fit, and mark support vectors on the plot
+    plt.figure()
+    plt.scatter(X.flatten(), y, color="tab:orange", label="data")
+    plt.plot(fit_X, fit_y, color="tab:blue", label="fit")
+    plt.scatter(support_vectors, support_ys, color="tab:red", label="support vectors", edgecolors="black")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("SVR with RBF kernel (sigma = 1.8, lambda = 0.1, epsilon = 1)")
+    plt.legend()
+    plt.savefig("homework-05/plots/sine_SVR_RBF.png")
+
+def sine_KRR_polynomial(X, y):
+    """
+    Sine dataset with polynomial kernel and kernelized ridge regression
+    """
+    kernel2 = Polynomial(9, 0.05)
+
+    model1 = KernelizedRidgeRegression(kernel=kernel2, lambda_=0.1)
+    model1 = model1.fit(X, y)
+
+    fit_X = np.linspace(0, 20, 1000)
+    fit_X = fit_X.reshape(-1, 1)
+
+    fit_y = model1.predict(fit_X)
+    fit_X = fit_X.flatten()
+
+    # plot the input data, the fit, and mark support vectors on the plot
+    plt.figure()
+    plt.scatter(X.flatten(), y, color="tab:orange", label="data")
+    plt.plot(fit_X, fit_y, color="tab:blue", label="fit")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("KRR with polynomial kernel (M = 9, lambda = 0.1)")
+    plt.legend()
+    plt.savefig("homework-05/plots/sine_KRR_polynomial.png")
+
+def sine_KRR_RBF(X, y):
+    """
+    Sine dataset with RBF kernel and kernelized ridge regression
+    """
+    kernel2 = RBF(1.8)
+
+    model1 = KernelizedRidgeRegression(kernel=kernel2, lambda_=0.1)
+    model1 = model1.fit(X, y)
+
+    fit_X = np.linspace(0, 20, 1000)
+    fit_X = fit_X.reshape(-1, 1)
+
+    fit_y = model1.predict(fit_X)
+    fit_X = fit_X.flatten()
+
+    # plot the input data, the fit, and mark support vectors on the plot
+    plt.figure()
+    plt.scatter(X.flatten(), y, color="tab:orange", label="data")
+    plt.plot(fit_X, fit_y, color="tab:blue", label="fit")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("KRR with RBF kernel (sigma = 1.8, lambda = 0.1)")
+    plt.legend()
+    plt.savefig("homework-05/plots/sine_KRR_RBF.png")
+
 def krr_and_polynomial_housing(test_X, test_y, train_X, train_y):
 
     mses = []
 
     for m in range(1, 11):
         
-        model = KernelizedRidgeRegression(kernel=Polynomial(m), 
+        model = KernelizedRidgeRegression(kernel=Polynomial(m, 0.05), 
                                           lambda_=1)
         model = model.fit(train_X, train_y)
         mse = calculate_mse(test_X, test_y, model)
         
-        opt_lambda = optimal_lambda(Polynomial(m), "KRR", train_X, train_y)
-        model2 = KernelizedRidgeRegression(kernel=Polynomial(m),
+        opt_lambda = optimal_lambda(Polynomial(m, 0.05), "KRR", train_X, train_y)
+        model2 = KernelizedRidgeRegression(kernel=Polynomial(m, 0.05),
                                            lambda_=opt_lambda)
         model2 = model2.fit(train_X, train_y)
         mse2 = calculate_mse(test_X, test_y, model2)
@@ -668,57 +729,52 @@ def svr_and_rbf_housing(test_X, test_y, train_X, train_y):
     plt.savefig("homework-05/plots/mse_comparison4.png")
     plt.show()
 
-
 if __name__ == "__main__":
-    # -------------------------------------------------------------------------
-    # I: sine dataset part
-
-    # load the data
-    df = pd.read_csv("homework-05/sine.csv")
-    
-    # randomly select 80% of the data for training
-    train = df.sample(frac=0.8, random_state=1)
-    # the other 20% is for testing
-    test = df.drop(train.index)
-    
-    # split the data into X and y
-    X = df.drop('y', axis=1).to_numpy()
-    y = df['y'].to_numpy()
-
-    kernel1 = Polynomial(6, 0.01)
-    kernel2 = RBF(0.1)
-
-    model1 = SVR(kernel=kernel1, lambda_=0.1, epsilon=0.1)
-    model1 = model1.fit(X, y)
-    model1 = model1.produce_sparse_solution(tolerance=1e-2)
-
-    print(len(model1.get_support_vectors()))
-
 #    # -------------------------------------------------------------------------
-#    # II. housing dataset part
+#    # I: sine dataset part (finished)
+#
 #    # load the data
-#    df = pd.read_csv("homework-05/housing2r.csv")
-#
-#    y = df["y"]
-#    X = df.drop("y", axis=1)
-#
-#    # first 80% of the data for training
-#    n_rows = int(df.shape[0] * 0.8)
-#
-#    # Select the first 80% of rows using iloc
-#    train_y = y.iloc[:n_rows].to_numpy()
-#    train_X = X.iloc[:n_rows, :].to_numpy()
-#    # Select the remaining 20% of rows using iloc
-#    test_y = y.iloc[n_rows:].to_numpy()
-#    test_X = X.iloc[n_rows:, :].to_numpy()
-#
+#    df = pd.read_csv("homework-05/sine.csv")
 #    
-#    # this one works, all though it is funny how predictions are worse for
-#    # higher values of M
-#    krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+#    # randomly select 80% of the data for training
+#    train = df.sample(frac=0.8, random_state=1)
+#    # the other 20% is for testing
+#    test = df.drop(train.index)
+#    
+#    # split the data into X and y
+#    X = df.drop('y', axis=1).to_numpy()
+#    y = df['y'].to_numpy()
 #
-#    svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
-#
-#    krr_and_rbf_housing(test_X, test_y, train_X, train_y)
-#
-#    svr_and_rbf_housing(test_X, test_y, train_X, train_y)
+#    # plot the input data, the fit and support vectors for each model
+#    sine_SVR_polynomial(X, y)
+#    sine_SVR_RBF(X, y)
+#    sine_KRR_polynomial(X, y)
+#    sine_KRR_RBF(X, y)
+
+    # -------------------------------------------------------------------------
+    # II. housing dataset part
+    # load the data
+    df = pd.read_csv("homework-05/housing2r.csv")
+
+    y = df["y"]
+    X = df.drop("y", axis=1)
+
+    # first 80% of the data for training
+    n_rows = int(df.shape[0] * 0.8)
+
+    # select the first 80% of rows using iloc
+    train_y = y.iloc[:n_rows].to_numpy()
+    train_X = X.iloc[:n_rows, :].to_numpy()
+
+    # select the remaining 20% of rows using iloc
+    test_y = y.iloc[n_rows:].to_numpy()
+    test_X = X.iloc[n_rows:, :].to_numpy()
+
+    # perform the experiments
+    krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+      
+    # svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+    # 
+    # krr_and_rbf_housing(test_X, test_y, train_X, train_y)
+    # 
+    # svr_and_rbf_housing(test_X, test_y, train_X, train_y)
