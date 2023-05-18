@@ -718,7 +718,7 @@ def svr_and_polynomial_housing(test_X, test_y, train_X, train_y):
         model2 = model2.fit(train_X, train_y)
         mse2 = calculate_mse(test_X, test_y, model2)
 
-        df_ = shrink_support_vectors(test_X, test_y, model)
+        df_ = shrink_support_vectors(test_X, test_y, model2)
         df_['M'] = m
         df_['lambda'] = opt_lambda
         df = pd.concat([df, df_])
@@ -821,6 +821,57 @@ def svr_and_rbf_housing(test_X, test_y, train_X, train_y):
     # save dataframe
     df.to_csv("homework-05/dataframes/svr_rbf.csv")
 
+def number_of_vectors():
+    """
+    Plots and stuff for number of vectors
+    """
+    df = pd.read_csv("homework-05/dataframes/svr_polynomial.csv")
+    df.drop('Unnamed: 0', axis=1, inplace=True)
+
+    # for each M plot the number of support vectors vs MSE increase
+    for m in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
+        df_ = df[(df['M'] == m) & (df['lambda'] == 1)]
+
+        plt.figure()
+        plt.plot(df_['Number of support vectors'], df_['MSE increase'])
+        plt.xlabel("Number of support vectors, lambda = 1")
+        plt.ylabel("MSE increase")
+        plt.title("Number of support vectors vs MSE increase for M = {}".format(m))
+        plt.savefig("homework-05/plots/number_of_vectors_{}-1.png".format(m))
+        plt.close()
+
+        df_ = df[(df['M'] == m) & (df['lambda'] != 1)]
+        plt.figure()
+        plt.plot(df_['Number of support vectors'], df_['MSE increase'])
+        plt.xlabel("Number of support vectors, lambda = optimal")
+        plt.ylabel("MSE increase")
+        plt.title("Number of support vectors vs MSE increase for M = {}".format(m))
+        plt.savefig("homework-05/plots/number_of_vectors_{}-opt.png".format(m))
+        plt.close()
+
+    df = pd.read_csv("homework-05/dataframes/svr_rbf.csv")
+    df.drop('Unnamed: 0', axis=1, inplace=True)
+
+    for sigma in [0.001, 0.01, 0.1, 1, 10, 100, 1000]:
+        df_ = df[(df['sigma'] == sigma) & (df['lambda'] == 1)]
+
+        plt.figure()
+        plt.plot(df_['Number of support vectors'], df_['MSE increase'])
+        plt.xlabel("Number of support vectors, lambda = 1")
+        plt.ylabel("MSE increase")
+        plt.title("Number of support vectors vs MSE increase for sigma = {}".format(sigma))
+        plt.savefig("homework-05/plots/number_of_vectors_sigma_{}-1.png".format(sigma))
+        plt.close()
+
+        df_ = df[(df['sigma'] == sigma) & (df['lambda'] != 1)]
+        plt.figure()
+        plt.plot(df_['Number of support vectors'], df_['MSE increase'])
+        plt.xlabel("Number of support vectors, lambda = optimal")
+        plt.ylabel("MSE increase")
+        plt.title("Number of support vectors vs MSE increase for sigma = {}".format(sigma))
+        plt.savefig("homework-05/plots/number_of_vectors_sigma_{}-opt.png".format(sigma))
+        plt.close()
+
 if __name__ == "__main__":
 #    # -------------------------------------------------------------------------
 #    # I: sine dataset part (finished)
@@ -880,8 +931,11 @@ if __name__ == "__main__":
     
     # krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
 
-    svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+    # svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
 
     # krr_and_rbf_housing(test_X, test_y, train_X, train_y)
     
-    svr_and_rbf_housing(test_X, test_y, train_X, train_y)
+    # svr_and_rbf_housing(test_X, test_y, train_X, train_y)
+
+    # last analysis: number of support vectors
+    number_of_vectors()
