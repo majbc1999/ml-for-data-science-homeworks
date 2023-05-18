@@ -32,7 +32,7 @@ class RBF:
         # 1D vector and 2D matrix
         elif x_dim == 1 and y_dim == 2:
             distance = np.linalg.norm(x - y, axis=1)
-            kernel = np.exp(-distance / (2 * self.sigma ** 2))
+            kernel = np.exp(-distance ** 2 / (2 * self.sigma ** 2))
             
         # 2D matrix and 1D vector
         elif x_dim == 2 and y_dim == 1:
@@ -873,26 +873,26 @@ def number_of_vectors():
         plt.close()
 
 if __name__ == "__main__":
-#    # -------------------------------------------------------------------------
-#    # I: sine dataset part (finished)
-#
-#    # load the data
-#    df = pd.read_csv("homework-05/sine.csv")
-#    
-#    # randomly select 80% of the data for training
-#    train = df.sample(frac=0.8, random_state=1)
-#    # the other 20% is for testing
-#    test = df.drop(train.index)
-#    
-#    # split the data into X and y
-#    X = df.drop('y', axis=1).to_numpy()
-#    y = df['y'].to_numpy()
-#
-#    # plot the input data, the fit and support vectors for each model
-#    sine_SVR_polynomial(X, y)
-#    sine_SVR_RBF(X, y)
-#    sine_KRR_polynomial(X, y)
-#    sine_KRR_RBF(X, y)
+    # -------------------------------------------------------------------------
+    # I: sine dataset part (finished)
+
+    # load the data
+    df = pd.read_csv("homework-05/sine.csv")
+    
+    # randomly select 80% of the data for training
+    train = df.sample(frac=0.8, random_state=1)
+    # the other 20% is for testing
+    test = df.drop(train.index)
+    
+    # split the data into X and y
+    X = df.drop('y', axis=1).to_numpy()
+    y = df['y'].to_numpy()
+
+    # plot the input data, the fit and support vectors for each model
+    sine_SVR_polynomial(X, y)
+    sine_SVR_RBF(X, y)
+    sine_KRR_polynomial(X, y)
+    sine_KRR_RBF(X, y)
 
     # -------------------------------------------------------------------------
     # II. housing dataset part
@@ -929,13 +929,10 @@ if __name__ == "__main__":
 
     # perform the experiments
     
-    # krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
-
-    # svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
-
-    # krr_and_rbf_housing(test_X, test_y, train_X, train_y)
-    
-    # svr_and_rbf_housing(test_X, test_y, train_X, train_y)
+    krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+    svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+    krr_and_rbf_housing(test_X, test_y, train_X, train_y)
+    svr_and_rbf_housing(test_X, test_y, train_X, train_y)
 
     # last analysis: number of support vectors
     number_of_vectors()
