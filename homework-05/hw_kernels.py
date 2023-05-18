@@ -28,11 +28,11 @@ class RBF:
         if x_dim == 1 and y_dim == 1:
             distance = np.linalg.norm(x - y)
             kernel = np.exp(-distance ** 2 / (2 * self.sigma ** 2))
-            
+
         # 1D vector and 2D matrix
         elif x_dim == 1 and y_dim == 2:
             distance = np.linalg.norm(x - y, axis=1)
-            kernel = np.exp(-distance ** 2 / (2 * self.sigma ** 2))
+            kernel = np.exp(-distance / (2 * self.sigma ** 2))
             
         # 2D matrix and 1D vector
         elif x_dim == 2 and y_dim == 1:
@@ -41,11 +41,14 @@ class RBF:
             
         # Two 2D matrices
         elif x_dim == 2 and y_dim == 2:
-            x_norm = np.sum(x ** 2, axis=1).reshape(-1, 1)
-            y_norm = np.sum(y ** 2, axis=1).reshape(1, -1)
+            x_norm = np.sum(x ** 2, axis=1, keepdims=True)
+            y_norm = np.sum(y ** 2, axis=1)
             # formula in tests
-            distance = np.sqrt(x_norm + y_norm - 2 * np.dot(x, y.T))
-            kernel = np.exp(-distance ** 2 / (2 * self.sigma ** 2))
+            # Compute the squared Euclidean distances
+            dist_sq = x_norm + y_norm - 2 * np.dot(x, y.T)
+        
+            # Compute the RBF kernel matrix
+            kernel = np.exp(- dist_sq / (2 * self.sigma ** 2))
             
         # Invalid input dimensions
         else:
@@ -215,6 +218,7 @@ class SVR:
 
         # set solver to silent call solver
         cvxopt.solvers.options['show_progress'] = False
+        
         solution = cvxopt.solvers.qp(P, q, G, h, A, b)
         
         # extract support vectors and bias
@@ -269,18 +273,44 @@ class SVR:
         """
         support_vectors = []
         counter = 0
+        init_sv = len(self.get_support_vectors())
         
         new_alphas = []
         for i, [a1, a1_] in enumerate(self.alpha):
             if abs(a1 - a1_) > tolerance:
-                support_vectors.append(self.support_vectors[i])
                 new_alphas.append([a1, a1_])
             else:
+                new_alphas.append([0, 0])
                 counter += 1
         print(f"Filtered out {counter} support vectors.")
         
-        self.support_vectors = np.array(support_vectors)
         self.alpha = np.array(new_alphas)
+
+        if counter == init_sv:
+            raise ValueError("No support vectors left." 
+                             "Try increasing the tolerance.")
+
+        return self
+
+    def filter_out_n_support_vectors(self, n: int):
+        """
+        Filters out n support vectors with the smallest weights.
+        """
+        if n < 0:
+            raise ValueError("n must be positive.")
+        if n > len(self.get_support_vectors()):
+            raise ValueError("n must be smaller than the number of support vectors.")
+
+        indices = []
+
+        for id, diff in enumerate(self._alpha_difference()):
+            if diff != 0:
+                indices.append((id, diff))
+
+        indices = sorted(indices, key=lambda x: abs(x[1]))
+
+        for i in range(n):
+            self.alpha[indices[i][0]] = [0, 0]
 
         return self
 
@@ -288,7 +318,13 @@ class SVR:
         """
         Return the support vectors.
         """
-        return self.support_vectors
+        returnable_sv = []
+
+        for i, diff in enumerate(self._alpha_difference()):
+            if diff != 0.0:
+                returnable_sv.append(self.support_vectors[i])
+            
+        return np.array(returnable_sv)
 
 
 # helper functions
@@ -481,6 +517,28 @@ def normalize(X: np.array) -> np.array:
     X = (X - np.mean(X)) / np.std(X)
     return X
 
+def shrink_support_vectors(X: np.array, 
+                           y: np.array,
+                           model: SVR) -> pd.DataFrame:
+    """
+    Returns the minimum number of support vectors needed to
+    represent the dataset within the given mse change (on `X` and `y`).
+    """
+    # base mse
+    mse = calculate_mse(X, y, model)
+    original_support_vectors = model.get_support_vectors()
+    df_list = []
+
+    for n in [1 for i in range(len(model.get_support_vectors()) - 1)]:
+        model = model.filter_out_n_support_vectors(n)
+        mse2 = calculate_mse(X, y, model)
+        print(f'MSE with {len(model.get_support_vectors())} vectors : {mse2}')
+
+        df_list.append([len(model.get_support_vectors()), mse2 - mse])
+
+    df = pd.DataFrame(df_list, columns=['Number of support vectors', 'MSE increase'])
+    return df
+
 # script functions
 
 def sine_SVR_polynomial(X, y):
@@ -492,7 +550,7 @@ def sine_SVR_polynomial(X, y):
     model1 = model1.fit(X, y)
     model1 = model1.produce_sparse_solution(tolerance=1e-3)
 
-    support_vectors = model1.support_vectors
+    support_vectors = model1.get_support_vectors()
     print(f'Length of support vectors: {len(support_vectors)}')
 
     support_ys = []
@@ -528,7 +586,7 @@ def sine_SVR_RBF(X, y):
     model1 = model1.fit(X, y)
     model1 = model1.produce_sparse_solution(tolerance=1e-3)
 
-    support_vectors = model1.support_vectors
+    support_vectors = model1.get_support_vectors()
     print(f'Length of support vectors: {len(support_vectors)}')
 
     support_ys = []
@@ -640,24 +698,34 @@ def krr_and_polynomial_housing(test_X, test_y, train_X, train_y):
 def svr_and_polynomial_housing(test_X, test_y, train_X, train_y):
     mses = []
 
+    df = pd.DataFrame()
+
     for m in range(1, 11):
         
         model = SVR(kernel=Polynomial(m, 0.00001), 
                            lambda_=1)
         model = model.fit(train_X, train_y)
         mse = calculate_mse(test_X, test_y, model)
-        
+        df_ = shrink_support_vectors(test_X, test_y, model)
+        df_['M'] = m
+        df_['lambda'] = 1
+        df = pd.concat([df, df_])
+
         opt_lambda = optimal_lambda(Polynomial(m, 0.00001), "SVR", train_X, train_y)
         
         model2 = SVR(kernel=Polynomial(m, 0.00001),
                      lambda_=opt_lambda)
         model2 = model2.fit(train_X, train_y)
         mse2 = calculate_mse(test_X, test_y, model2)
-        print(f'Works for m = {m}')
+
+        df_ = shrink_support_vectors(test_X, test_y, model)
+        df_['M'] = m
+        df_['lambda'] = opt_lambda
+        df = pd.concat([df, df_])
+
         mses.append([m, mse, mse2])
 
     mses = np.array(mses)
-    print(mses)
 
     # plot
     plt.figure()
@@ -670,6 +738,9 @@ def svr_and_polynomial_housing(test_X, test_y, train_X, train_y):
     plt.savefig("homework-05/plots/mse_comparison2.png")
     plt.show()
 
+    # save dataframe
+    df.to_csv("homework-05/dataframes/svr_polynomial.csv")
+
 def krr_and_rbf_housing(test_X, test_y, train_X, train_y):
     mses = []
 
@@ -681,7 +752,7 @@ def krr_and_rbf_housing(test_X, test_y, train_X, train_y):
         mse = calculate_mse(test_X, test_y, model)
         
         opt_lambda = optimal_lambda(RBF(sigma), "SVR", train_X, train_y)
-        print(opt_lambda)
+
         model2 = KernelizedRidgeRegression(kernel=RBF(sigma),
                      lambda_=opt_lambda)
         model2 = model2.fit(train_X, train_y)
@@ -707,35 +778,48 @@ def krr_and_rbf_housing(test_X, test_y, train_X, train_y):
 def svr_and_rbf_housing(test_X, test_y, train_X, train_y):
     mses = []
 
+    df = pd.DataFrame(columns=["sigma", "lambda", "Number of support vectors", "MSE increase"])
+
     for sigma in [0.001, 0.01, 0.1, 1, 10, 100, 1000]:
         
         model = SVR(kernel=RBF(sigma), 
                     lambda_=1)
         model = model.fit(train_X, train_y)
         mse = calculate_mse(test_X, test_y, model)
-        
+        df_ = shrink_support_vectors(test_X, test_y, model)
+        df_['sigma'] = sigma
+        df_['lambda'] = 1
+        df = pd.concat([df, df_])
+
         opt_lambda = optimal_lambda(RBF(sigma), "SVR", train_X, train_y)
-        print(opt_lambda)
+
         model2 = SVR(kernel=RBF(sigma),
                      lambda_=opt_lambda)
         model2 = model2.fit(train_X, train_y)
         mse2 = calculate_mse(test_X, test_y, model2)
+        df_ = shrink_support_vectors(test_X, test_y, model2)  # noqa E501
+        df_['sigma'] = sigma
+        df_['lambda'] = opt_lambda
+        df = pd.concat([df, df_])
 
         mses.append([sigma, mse, mse2])
 
     mses = np.array(mses)
-    print(mses)
 
     # plot
     plt.figure()
     plt.plot(mses[:, 0], mses[:, 1], label="lambda = 1", color="red")
     plt.plot(mses[:, 0], mses[:, 2], label="lambda = optimal", color="blue")
-    plt.xlabel("M")
+    plt.xlabel("sigma")
+    plt.xscale("log")
     plt.ylabel("MSE")
     plt.title("MSE for sigma = 0.001, ..., 1000 for rbf kernel \n (SVR)")
     plt.legend()
     plt.savefig("homework-05/plots/mse_comparison4.png")
     plt.show()
+
+    # save dataframe
+    df.to_csv("homework-05/dataframes/svr_rbf.csv")
 
 if __name__ == "__main__":
 #    # -------------------------------------------------------------------------
@@ -770,20 +854,34 @@ if __name__ == "__main__":
     # first 80% of the data for training
     n_rows = int(df.shape[0] * 0.8)
 
+    X = X.to_numpy()
+    y = y.to_numpy()
+
+    # normalize the data
+    X = normalize(X)
+
     # select the first 80% of rows using iloc
-    train_y = y.iloc[:n_rows].to_numpy()
-    train_X = X.iloc[:n_rows, :].to_numpy()
+    train_y = y[:n_rows]
+    train_X = X[:n_rows, :]
 
     # select the remaining 20% of rows using iloc
-    test_y = y.iloc[n_rows:].to_numpy()
-    test_X = X.iloc[n_rows:, :].to_numpy()
-    
+    test_y = y[n_rows:]
+    test_X = X[n_rows:, :]
+
+    # rbf kernel
+    kernel = RBF(1)
+    # kernelized ridge regression
+    model = KernelizedRidgeRegression(kernel=kernel, lambda_=0.1)
+    model = model.fit(train_X, train_y)
+    # calculate the mse
+    pred_y = model.predict(test_X)
+
     # perform the experiments
     
-    krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+    # krr_and_polynomial_housing(test_X, test_y, train_X, train_y)
 
-    # svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
-     
+    svr_and_polynomial_housing(test_X, test_y, train_X, train_y)
+
     # krr_and_rbf_housing(test_X, test_y, train_X, train_y)
     
-    # svr_and_rbf_housing(test_X, test_y, train_X, train_y)
+    svr_and_rbf_housing(test_X, test_y, train_X, train_y)
