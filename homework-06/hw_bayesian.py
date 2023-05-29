@@ -3,6 +3,7 @@ import pandas as pd
 from typing import Tuple
 import pymc3 as pm
 from scipy.special import expit
+from scipy.stats import gaussian_kde
 import matplotlib.pyplot as plt
 
 # classes
@@ -24,7 +25,6 @@ class BayesianLogisticRegression:
 
         self.trace = None
         self.model = None
-
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> None:
         """
@@ -58,7 +58,6 @@ class BayesianLogisticRegression:
 
         return self
 
-
     def get_betas(self):
         """
         Return intercept and betas for sampling.
@@ -69,7 +68,6 @@ class BayesianLogisticRegression:
         beta2_samples = self.trace["beta2"]
 
         return intercept_samples, beta1_samples, beta2_samples
-
 
     def predict_instance_distribution(self, 
                                       x: np.ndarray, 
@@ -97,9 +95,10 @@ class BayesianLogisticRegression:
             plt.show()
 
         return probs
-        
 
-    def print_plots(self, save: bool = False):
+    def print_plots(self,
+                    caption: str,
+                    save: bool = False):
         """
         Print plots.
         """
@@ -109,29 +108,30 @@ class BayesianLogisticRegression:
         
         intercept, beta_1, beta_2 = self.get_betas()
 
-        plt.figure('Intercept distribution')
+        plt.figure(f'Intercept distribution {caption}')
         plt.hist(intercept, bins=50, density=True)
-        plt.title("Intercept distribution")
+        plt.title("Intercept distribution: {caption} samples")
         if save:
-            plt.savefig("homework-06/plots/intercept.png", bbox_inches='tight')
+            plt.savefig(f"homework-06/plots/{caption}_intercept.png", bbox_inches='tight')
 
-        plt.figure('Beta 1 distribution')
+        plt.figure(f'Beta 1 distribution {caption}')
         plt.hist(beta_1, bins=50, density=True)
-        plt.title("Beta 1 distribution (angle)") 
+        plt.title("Beta 1 distribution (angle): {caption} samples") 
         if save:
-            plt.savefig("homework-06/plots/beta_1.png", bbox_inches='tight')
+            plt.savefig(f"homework-06/plots/{caption}_beta_1.png", bbox_inches='tight')
 
-        plt.figure('Beta 2 distribution')
+        plt.figure(f'Beta 2 distribution {caption}')
         plt.hist(beta_2, bins=50, density=True)
-        plt.title("Beta 2 distribution (distance)")
+        plt.title("Beta 2 distribution (distance): {caption} samples")
         if save:
-            plt.savefig("homework-06/plots/beta_2.png", bbox_inches='tight')
+            plt.savefig(f"homework-06/plots/{caption}_beta_2.png", bbox_inches='tight')
 
         plt.show()
         return
 
-
-    def statistics(self, save: bool = False):
+    def statistics(self, 
+                   caption: str,
+                   save: bool = False):
         """
         Returns pandas dataframe with statistics
         """
@@ -155,9 +155,54 @@ class BayesianLogisticRegression:
                      np.quantile(beta_2, 0.975)]
 
         if save:
-            df.to_csv('homework-06/plots/statistics.csv', index=False)
+            df.to_csv(f'homework-06/plots/{caption}_statistics.csv', index=False)
 
         return df
+
+    def scatterplot_contours(self,
+                             caption: str,
+                             save: bool = False):
+        """
+        Scatterplot with contours.
+        """
+        if self.trace is None:
+            raise RuntimeError("The model has not been fitted. " 
+                               "Call the fit method first.")
+
+        intercept, beta_1, beta_2 = self.get_betas()
+
+        plt.figure(f'Scatterplot with contours {caption}')
+        plt.scatter(beta_1, beta_2, alpha=0.1)
+        plt.title(f"Scatterplot with contours: {caption} samples")
+        plt.xlabel("Beta 1 (angle)")
+        plt.ylabel("Beta 2 (distance)")
+        plt.grid(True)
+
+        # Add contours with colorscale
+        kde_x = np.linspace(-1, 0.5, 100)
+        kde_y = np.linspace(-2, -0.25, 100)
+        kde_X, kde_Y = np.meshgrid(kde_x, kde_y)
+        kde_pos = np.vstack([kde_X.ravel(), kde_Y.ravel()])
+
+        # Compute kernel density estimation (KDE)
+        kde = gaussian_kde(np.vstack([beta_1, beta_2]))
+        kde_Z = kde(kde_pos).reshape(kde_X.shape)
+
+        # Plot contours with colorscale
+        plt.contourf(kde_X, kde_Y, kde_Z, levels=5, cmap='coolwarm')
+        plt.xlim((-1, 0.5))
+        plt.ylim((-2, -0.25))
+        plt.show()
+
+        # Add colorbar
+        cbar = plt.colorbar()
+        cbar.set_label('Density')
+
+
+        if save:
+            plt.savefig(f"homework-06/plots/{caption}_scatterplot.png", bbox_inches='tight')
+        
+        return
 
 # misc
 
@@ -176,16 +221,32 @@ def import_dataset(path: str) -> Tuple[np.ndarray, np.array]:
 if __name__ == '__main__':
     X, y = import_dataset('homework-06/dataset.csv')
 
+    # pick 50 samples randomly
+    np.random.seed(69)
+    idx = np.random.choice(X.shape[0], 50, replace=False)
+    X_1 = X[idx]
+    y_1 = y[idx]
+
     # build a model and fit it (10000 posterior samples)
     model = BayesianLogisticRegression(n_samples=10000,
                                        normalize=True).fit(X, y)
 
+    model2 = BayesianLogisticRegression(n_samples=10000,
+                                        normalize=True).fit(X_1, y_1)
+
     # print distribution plots
-    model.print_plots(save=True)
+    model.print_plots(caption='all', save=True)
+    model2.print_plots(caption='50', save=True)
+
+    # print scatterplots with contours
+    model.scatterplot_contours(caption='all', save=True)
+    model2.scatterplot_contours(caption='50', save=True)
 
     print('\n')
 
     # print statistics
-    print('Statistics:')
-    print(model.statistics(save=True))
-
+    print('Statistics for all data:')
+    print(model.statistics(caption='all', save=True))
+    print('\n')
+    print('Statistics for 50 samples:')
+    print(model2.statistics(caption='50', save=True))
